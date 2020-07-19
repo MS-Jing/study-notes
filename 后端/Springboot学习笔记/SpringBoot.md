@@ -932,7 +932,7 @@ public interface UserMapper {
 
 # SpringSecurity
 
-Spring Security是Spring提供的一个**==安全框架==**，提供**认证和授权功能**，最主要的是它提供了简单的使用方式，同时又有很高的灵活性，简单，灵活，强大。
+Spring Security是Spring提供的一个**==安全框架==**，提供**认证（对用户认证）和授权（对不同权限授权）功能**，最主要的是它提供了简单的使用方式，同时又有很高的灵活性，简单，灵活，强大。
 
 权限：
 
@@ -941,7 +941,7 @@ Spring Security是Spring提供的一个**==安全框架==**，提供**认证和�
 + 访问权限
 + ......
 
-**在之前我们都是使用拦截器和过滤器需要写大量的原生代码**
+**在之前我们都是使用拦截器和过滤器需要写大量的原生代码**，本例通过狂神说java的SpringSecurity的资源做演示学习
 
 引入依赖
 
@@ -963,48 +963,125 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
-//用AOP实现了，不用修改原有代码。做到拦截功能
+//开启WebSecurity的功能
 @EnableWebSecurity
-public class SecurityConfig extends WebSecurityConfigurerAdapter {
+public class MySecurityConfig extends WebSecurityConfigurerAdapter {
+
+    //认证（从内存中）
+    /**
+     *从2.1.x之后所有的密码需要做加密处理
+     */
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.inMemoryAuthentication().passwordEncoder(new BCryptPasswordEncoder())
+                .withUser("kuangshen").password(new BCryptPasswordEncoder().encode("123456")).roles("vip2","vip3")
+                .and()
+                .withUser("root").password(new BCryptPasswordEncoder().encode("123456")).roles("vip1","vip2","vip3")
+                .and()
+                .withUser("guest").password(new BCryptPasswordEncoder().encode("123456")).roles("vip1");
+    }
+
 
     //授权
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         //首页所有人可以访问。功能页只有有权限的人才能访问
-        //链式编程
-
-        //要授权的请求，请求授权的规则
         http.authorizeRequests()
                 //添加首页为所有人都可以访问的请求
                 .antMatchers("/").permitAll()
-                //添加level1下面的只有vip1可以访问
+                //不同页面不同权限
                 .antMatchers("/level1/**").hasRole("vip1")
                 .antMatchers("/level2/**").hasRole("vip2")
                 .antMatchers("/level3/**").hasRole("vip3");
 
-        //没有权限到登录页面,他会自动重定向到默认的login页面
-        http.formLogin().loginPage("/toLogin").usernameParameter("username").passwordParameter("password").loginProcessingUrl("/log");
+        //没有权限去登陆页，开启登录页（默认的）
+        //  loginPage("/toLogin")设置我们自己的登录页面路由
+        //  loginProcessingUrl("/login")登录认证的路由
+        http.formLogin().loginPage("/toLogin")
+                .usernameParameter("username").passwordParameter("password")
+                .loginProcessingUrl("/login");
 
-        //记住我
-        http.csrf().disable();//防止跨站攻击，需要关闭csrf功能
-        http.rememberMe().rememberMeParameter("rem");
+        //为了防止跨站攻击，boot自动开启了csrf功能，需要关闭csrf功能
+        http.csrf().disable();
 
-        //注销
-        http.logout().logoutSuccessUrl("/");
-    }
+        //开启记住我功能，默认保存两周
+        http.rememberMe().rememberMeParameter("remember");
 
-    //认证
-    //在spring Security 5.x新增了很多加密方式
-    @Override
-    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-        //可以从内存中认证，也可以从数据库中认证
-        auth.inMemoryAuthentication().passwordEncoder(new BCryptPasswordEncoder())
-                .withUser("luo").password(new BCryptPasswordEncoder().encode("123")).roles("vip1","vip2","vip3")
-                .and()//通过and拼接多个用户
-                .withUser("jing").password(new BCryptPasswordEncoder().encode("456")).roles("vip1","vip2");
+        //开启注销，如果不设置的话他就会跳到他默认的注销页面，设置logoutSuccessUrl("/")跳转到我们的首页
+        http.logout().logoutUrl("/logout").logoutSuccessUrl("/");
     }
 }
 ```
+
+通过上面的配置我们可以做相应的用户认证和不同权限的授权，但是在前端用thymeleaf,我们想在未登录时显示登录，登录之后显示用户名和注销就需要引入相关的依赖和操作了
+
+```xml
+<!--security-thymeleaf整合包-->
+<!-- https://mvnrepository.com/artifact/org.thymeleaf.extras/thymeleaf-extras-springsecurity5 -->
+<dependency>
+    <groupId>org.thymeleaf.extras</groupId>
+    <artifactId>thymeleaf-extras-springsecurity5</artifactId>
+    <version>3.0.4.RELEASE</version>
+</dependency>
+```
+
+页面加上命名空间：
+
+```html
+xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity5"
+```
+
+页面：
+
+```html
+<!--登录注销-->
+<div class="right menu">
+
+    <!--如果未登录-->
+    <div sec:authorize="!isAuthenticated()"><!--对这一块的内容授权，如果未登陆显示-->
+        <a class="item" th:href="@{/toLogin}">
+            <i class="address card icon"></i> 登录
+        </a>
+    </div>
+
+
+    <!--如果以登录 用户名和注销-->
+    <div sec:authorize="isAuthenticated()"><!--对这一块的内容授权，如果登陆了再显示-->
+        <!--注销-->
+        <a class="item">
+            用户名：<span sec:authentication="name"></span><!--认证；当前用户的用户名-->
+            权限：<span sec:authentication="principal.authorities"></span><!--认证；当前用户的权限-->
+        </a>
+    </div>
+    <div sec:authorize="isAuthenticated()">
+        <!--注销-->
+        <a class="item" th:href="@{/logout}">
+            <i class="sign-out icon"></i> 注销
+        </a>
+    </div>
+
+</div>
+
+
+<!--授权这块内容的权限是vip1的用户权限才可以看到-->
+<div class="column" sec:authorize="hasRole('vip1')">
+    <div class="ui raised segment">
+        <div class="ui">
+            <div class="content">
+                <h5 class="content">Level 1</h5>
+                <hr>
+                <div><a th:href="@{/level1/1}"><i class="bullhorn icon"></i> Level-1-1</a></div>
+                <div><a th:href="@{/level1/2}"><i class="bullhorn icon"></i> Level-1-2</a></div>
+                <div><a th:href="@{/level1/3}"><i class="bullhorn icon"></i> Level-1-3</a></div>
+            </div>
+        </div>
+    </div>
+</div>
+```
+
+
+
+
 
 # shiro
 

@@ -484,7 +484,12 @@ vue-cli是光放提供的一个脚手架，用于快速生成的一个vue项目�
   + 在cmd模式下`node -v`查看版本号
 + node自带npm,`npm -v`查看版本号
   + 安装nodejs淘宝镜像加速器cnpm
-  + `npm install cnpm -g`         -g是全局安装
+  + `npm install -g cnpm --registry=https://registry.npm.taobao.org`         -g是全局安装
++ 设置npm的缓存下载位置和模块下载位置（可以略过）
+  + 查看当前默认配置`npm config ls -l`
+  + 配置缓存位置`npm config set cache "D:\environment\nodejs\npm-cache"`
+  + 配置本地仓库`npm config set prefix "D:\environment\nodejs\npm_global"`
+  + 注意修改了配置后`cnpm`不能用了，需要配置环境变量`%NODE_HOME%\node_global`
 + 安装vue-cli模块
   + `cnpm install vue-cli -g`
   + 测试是否安装成功，还可以查看可以基于哪些模块创建vue应用程序，通常我们使用webpack`vue list`
@@ -633,7 +638,7 @@ export default {
 
 ```
 
-routrt相关的文件：router/index.js:(表示router的主配置)
+router相关的文件：router/index.js:(表示router的主配置)
 
 ```javascript
 import Vue from "vue";

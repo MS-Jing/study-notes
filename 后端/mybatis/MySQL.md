@@ -1,3 +1,244 @@
+# mysql基础知识
+
+我们的网站、APP。这些东西上面都存在大量的信息，这些信息都需要有地方存储，存储在哪呢？数据库。
+
+如果我们需要开发一个网站、app，数据库我们必须掌握的技术，常用的数据库有mysql、oracle、sqlserver、db2等。
+
+## 常见概念
+
+**DB**：数据库，存储数据的容器。
+
+**DBMS**：数据库管理系统，又称为数据库软件或数据库产品，用于创建或管理DB。
+
+**SQL**：结构化查询语言，用于和数据库通信的语言，不是某个数据库软件持有的，而是几乎所有的主流数据库软件通用的语言。中国人之间交流需要说汉语，和美国人之间交流需要说英语，和数据库沟通需要说SQL语言。
+
+## 启动mysql服务
+
+下载安装可直接去官网即可：
+
+安装之后需要启动服务：
+
++ 以管理员身份打开cmd
++ 启动命令：`net start mysql`
++ 停止命令：`net stop mysql`
+
+## 登陆命令
+
+`mysql -h ip -P 端口 -u 用户名 -p`
+
+**说明：**
+
++ -P 大写的P后面跟端口号
++ 如果是本地登陆可以省略ip和端口
+
+## 常见的其他命令
+
+**查看数据库版本：**
+
+> + `mysql --version`用于在未登录情况下，查看本机版本
+> + `select version`:登陆情况下查看
+
+**显示所有数据库：**
+
+> `show databases;`
+
+**使用指定数据库：**
+
+> `use 库名；`
+
+**显示当前使用库所有的表:**
+
+> `show tables;`
+
+**查看表结构：**
+
+> `desc 表名`
+
+## mysql语法规范
+
+1. 不区分大小写，但建议关键字大写，表名、列名小写
+
+2. 每条命令最好用英文分号结尾
+
+3. 每条命令根据需要，可以进行缩进或换行
+
+4. 注释
+
+5. - 单行注释：#注释文字
+   - 单行注释：-- 注释文字  ，注意， 这里需要加空格
+   - 多行注释：/* 注释文字  */
+
+## SQL的语言分类
+
+- **DQL（Data Query Language）**：数据查询语言
+  select 相关语句
+- **DML（Data Manipulate Language）**：数据操作语言
+  insert 、update、delete 语句
+- **DDL（Data Define Languge）**：数据定义语言
+  create、drop、alter 语句
+- **TCL（Transaction Control Language）**：事务控制语言
+  set autocommit=0、start transaction、savepoint、commit、rollback
+
+# mysql数据类型（重点）
+
+**数据类型：**
+
+> **bit**,**bool**,**tinyint**,**smallint**,**mediumint**,**int**,**bigint**
+
+**浮点型类型：**
+
+> **float**,**double**,**decimal**
+
+**字符串类型：**
+
+> **char**,**varchar**,**tinyblob**,**blob**,**mediumblob**,**longblob**,**tinytext**,**text**,**mediumtext**,**longtext**
+
+**日期类型：**
+
+>**Date**,**DateTime**，**TimeStamp**,**Time**,**Year**
+
+## 整数类型
+
+| 类型                      | 字节数 | 无符号值范围 | 有符号范围       |
+| ------------------------- | ------ | ------------ | ---------------- |
+| tinyint[(n)] [unsigned]   | 1      | [0,2^8^-1]   | [-2^7^,2^7^-1]   |
+| smallint[(n)] [unsigned]  | 2      | [0,2^16^-1]  | [-2^15^,2^15^-1] |
+| mediumint[(n)] [unsigned] | 3      | [0,2^24^-1]  | [-2^23^,2^23^-1] |
+| int[(n)] [unsigned]       | 4      | [0,2^32^-1]  | [-2^31^,2^31^-1] |
+| bigint[(n)] [unsigned]    | 8      | [0,2^64^-1]  | [-2^63^,2^63^-1] |
+
+[]内的内容是可选的，默认是有符号类型，无符号类型在后面加上unsigned
+
+> **实例：有符号类型**
+
+```mysql
+-- 创建了demo1表，有一个c1字段 类型为tinyint 有符号
+mysql> create table demo1(
+      c1 tinyint
+     );
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> insert into demo1 values(-pow(2,7)),(pow(2,7)-1);
+Query OK, 2 rows affected (0.00 sec)
+Records: 2  Duplicates: 0  Warnings: 0
+
+mysql> select * from demo1;
++------+
+| c1   |
++------+
+| -128 |
+|  127 |
++------+
+2 rows in set (0.00 sec)
+
+-- 超出tinyint的范围了报错
+mysql> insert into demo1 values(pow(2,7));
+ERROR 1264 (22003): Out of range value for column 'c1' at row 1
+```
+
+> **实例：无符号类型**
+
+```mysql
+-- 创建了demo2表，有一个c1字段 类型为tinyint 无符号
+mysql> create table demo2(
+      c1 tinyint unsigned
+     );
+Query OK, 0 rows affected (0.01 sec)
+
+-- c1是无符号的tinyint类型的，插入了负数会报错。
+mysql> insert into demo2 values (-1);
+ERROR 1264 (22003): Out of range value for column 'c1' at row 1
+-- 超出范围会报错
+mysql> insert into demo2 values (pow(2,8)+1);
+ERROR 1264 (22003): Out of range value for column 'c1' at row 1
+
+mysql> insert into demo2 values (0),(pow(2,8)-1);
+Query OK, 2 rows affected (0.00 sec)
+Records: 2  Duplicates: 0  Warnings: 0
+
+mysql> select * from demo2;
++------+
+| c1   |
++------+
+|    0 |
+|  255 |
++------+
+2 rows in set (0.00 sec)
+```
+
+> **类型（n）的说明**
+
+​		在开发中，我们会碰到有些定义整型的写法是int(11)，`int(N)`我们只需要记住两点：
+
++ 无论N等于多少，int永远占4个字节
++ **N表示的是显示宽度，不足的用0补足，超过的无视长度而直接显示整个数字，但这要整型设置了unsigned zerofill才有效**
+
+```mysql
+mysql> CREATE TABLE test3 (
+       `a` int,
+       `b` int(5),
+       `c` int(5) unsigned,
+       `d` int(5) zerofill,
+       `e` int(5) unsigned zerofill,
+       `f` int    zerofill,
+       `g` int    unsigned zerofill
+     );
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> insert into test3 values (1,1,1,1,1,1,1),(11,11,11,11,11,11,11),(12345,12345,12345,12345,12345,12345,12345);
+Query OK, 3 rows affected (0.00 sec)
+Records: 3  Duplicates: 0  Warnings: 0
+
+mysql> select * from test3;
++-------+-------+-------+-------+-------+------------+------------+
+| a     | b     | c     | d     | e     | f          | g          |
++-------+-------+-------+-------+-------+------------+------------+
+|     1 |     1 |     1 | 00001 | 00001 | 0000000001 | 0000000001 |
+|    11 |    11 |    11 | 00011 | 00011 | 0000000011 | 0000000011 |
+| 12345 | 12345 | 12345 | 12345 | 12345 | 0000012345 | 0000012345 |
++-------+-------+-------+-------+-------+------------+------------+
+3 rows in set (0.00 sec)
+
+mysql> show create table test3;
+| Table | Create Table                                                   
+| test3 | CREATE TABLE `test3` (
+  `a` int(11) DEFAULT NULL,
+  `b` int(5) DEFAULT NULL,
+  `c` int(5) unsigned DEFAULT NULL,
+  `d` int(5) unsigned zerofill DEFAULT NULL,
+  `e` int(5) unsigned zerofill DEFAULT NULL,
+  `f` int(10) unsigned zerofill DEFAULT NULL,
+  `g` int(10) unsigned zerofill DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+1 row in set (0.00 sec)
+```
+
+注意：
+
+> ​	`show create table test3;`输出了表`test3`的创建语句，和我们原始的创建语句不一致了，原始的`d`字段用的是无符号的，可以看出当使用了`zerofill`自动会将无符号提升为有符号。
+>
+> ​	int(5)输出宽度不满5时，前面用0来进行填充
+>
+> ​	int(n)中的n省略的时候，==**宽度为对应类型无符号最大值的十进制的长度**==，如bigint无符号最大值为2的64次方-1等于18,446,744,073,709,551,615‬；长度是20位
+
+​	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # 事务
 
 ## 什么是事务？

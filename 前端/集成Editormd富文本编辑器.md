@@ -14,21 +14,18 @@
 
 #### 引入相关静态资源
 
-+ 将fonts目录和images目录放入项目static目录下
++ 在static文件下创建lib目录再在此下面创建editormd文件
 
-+ 将css目录下editormd.min.css文件放入项目css目录下
++ 将下载的editor.md目录下的css,fonts,images,languages,lib,plugins,editormd.js,editormd.min.js放入到创建的editormd目录下
 
-+ 将src目录下editormd.js文件放入项目js目录下
-
-+ 将lib目录放到项目js目录下
-
-+ `<link href="/css/editormd.min.css" rel="stylesheet" type="text/css">`
++ ` <link href="/lib/editormd/css/editormd.min.css" rel="stylesheet" type="text/css">`
 
 + 先引入jQuery再引入editormd.js
 
   + ```html
     <script src="/js/jquery.min.js" type="text/javascript"></script>
-    <script src="/js/editormd.js" type="text/javascript"></script>
+    <script src="/js/bootstrap.min.js" type="text/javascript"></script>
+    <script src="/lib/editormd/editormd.min.js" type="text/javascript"></script>
     ```
 
 #### 一个简单的模板
@@ -60,7 +57,7 @@
             width   : "90%",
             height  : 640,
             syncScrolling : "single",
-            path    : "/js/lib/",
+            path    : "/lib/editormd/lib/",
             emoji : true,
             saveHTMLToTextarea : true,
             tocm : true, // Using [TOCM]
@@ -90,7 +87,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
-    <link href="/css/editormd.min.css" rel="stylesheet" type="text/css">
+    <link href="/lib/editormd/css/editormd.min.css" rel="stylesheet" type="text/css">
     <link href="/css/bootstrap.min.css" rel="stylesheet" type="text/css">
 </head>
 <body>
@@ -108,10 +105,9 @@
                     <input type="text" name="title" id="title" class="form-control">
 
                     <div class="input-group-prepend">
-                        <!--当他点击触发提交事件-->
                         <button class="btn btn-sm btn-success" type="button" id="commit">提交</button>
                     </div>
-                    <!--只是为了传输数据-->
+
                     <textarea id="blog_md" name="content" value="" style="display: none;"></textarea>
                 </div>
             </form>
@@ -122,13 +118,15 @@
 
         </div>
     </div>
+
+
     <div class="card-footer"></div>
 </div>
 
 
 <script src="/js/jquery.min.js" type="text/javascript"></script>
 <script src="/js/bootstrap.min.js" type="text/javascript"></script>
-<script src="/js/editormd.js" type="text/javascript"></script>
+<script src="/lib/editormd/editormd.min.js" type="text/javascript"></script>
 
 <script type="text/javascript">
     var testEditor;
@@ -139,12 +137,13 @@
             width   : "90%",
             height  : 640,
             syncScrolling : "single",
-            path    : "/js/lib/",
+            path    : "/lib/editormd/lib/",
             emoji : true,
             saveHTMLToTextarea : true,
             tocm : true, // Using [TOCM]
             tex : true, // 开启科学公式TeX语言支持，默认关闭
             flowChart : true // 开启流程图支持，默认关闭
+
         });
     });
 
@@ -153,7 +152,10 @@
             alert("标题不能为空！");
             return;
         }
-        $("#blog_md").val(testEditor.getMarkdown());
+        //得到Markdown写的文件的html文件给表单的多行文本框
+        //然后保存到后端数据库
+        $("#blog_md").val(testEditor.getHTML());
+        console.log($("#formBlog").serialize());
 
         $.ajax({
             url: "/admin/article/addArticle",
@@ -168,9 +170,19 @@
                 }
             }
         });
+
     });
 </script>
 </body>
 </html>
 ```
 
+## 页面显示
+
+前面我们已经可以获取到Markdown写的html文件，但是我们怎么将他按照Markdown的格式显示出来呢？
+
+> typo.css
+
+[github](https://github.com/sofish/typo.css)
+
+将typo.css引入到项目中，将Markdown的html写入到一个div中并加上.typo类即可显示出Markdown的格式了
