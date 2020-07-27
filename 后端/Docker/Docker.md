@@ -347,16 +347,135 @@ docker start 容器id		#启动容器
 docker restart 容器id		#重启容器
 docker stop 容器id		#停止当前正在运行的容器
 docker kill 容器id		#强制停止当前容器
-docker exec -ti 容器id /bin/bash #重启后进入容器
 ```
 
 
 
 ## 其他常用命令
 
+> **后台启动容器**
+
+```shell
+#后台启动容器
+[root@iZbp138sn4z9yrtqweb5brZ ~]# docker run -d centos
+#会出现的问题，centos已经停止了
+# docker容器使用后台运行，就必须要有一个前台进程，docker发现没有应用就会自动停止
+```
+
+> **查看日志**
+
+```shell
+# docker logs
+[root@iZbp138sn4z9yrtqweb5brZ ~]# docker logs -tf --tail 10 2ad301e9d68f #查看该容器的最近十条日志
+
+```
+
+> **查看容器中的进程信息**
+
+```shell
+#top命令
+docker top 容器id
+```
+
+> **查看镜像的元数据**
+
+```shell
+docker inspect 容器id
+```
+
+> **进入正在运行的容器**
+
+```shell
+#方式一
+#进入容器开启一个新的终端
+docker exec -it 容器id /bin/bash #重启后进入容器
+
+#方式二
+#进入容器正在执行的终端
+docker attach 容器id
+```
+
+> **从容器内拷贝文件到主机上**
+
+```shell
+docker cp 容器id:容器内路径 主机路径
+```
+
+## 可视化
+
+> **portainer**
+
+docker图形化界面管理工具！
+
+```shell
+docker run -d -p 8088:9000 \
+--restart=always -v /var/run/docker.sock:/var/run/docker.sock --privileged=true portainer/portainer
+```
+
+# Docker镜像讲解
+
+## 镜像是什么
+
+镜像是一种轻量级、可执行的独立软件包,用来打包软件运行环境和基于运行环境开发的软件.它包含运行某个软件所需的所有内容,包括代码、运行时、库、环境变量和配置文件。
+
+所有的应用,直接打包docker镜像,就可以直接跑起来!
 
 
 
+## commit镜像
+
+如何提交一个自己的镜像？
+
+```shell
+docker commit -m="提交的描述" -a="作者" 容器id 目标镜像名：[TAG]
+```
+
+提交自己修改过的Tomcat镜像
+
+```shell
+[root@iZbp138sn4z9yrtqweb5brZ ~]# docker commit -a='lj' -m='add webapps app' f7c7d1c6a59c tomcat02:1.0
+sha256:e78bea2c6e287a459597e3c821f924f3112d5ac88a61d7f389386dd4e3e1f055
+```
+
+
+
+# 容器数据卷
+
+docker是将应用和环境打包成一个镜像，运行起来成一个容器。如果数据都保存在容器中，如果容器删除了，数据也就丢失了。所以需要容器之间有一个数据共享的技术。将docker容器中产生的数据，同步到本地。
+
+卷技术：目录挂载，将容器内的目录挂载到Linux上面
+
+## 使用数据卷
+
+> 方式一：使用命令挂载
+
+```shell
+docker run -it -v 主机目录:容器内目录
+docker run -d --name="fs_tomcat" -v /home/webapps:/usr/local/tomcat/webapps -p 8081:8080 tomcat:9.0
+```
+
+## 实战：安装MySQL
+
+```shell
+#拉取镜像
+docker pull mysql:5.7
+
+#运行容器，做数据挂载
+-e 配置数据库的root用户密码
+[root@iZbp138sn4z9yrtqweb5brZ conf]# docker run -d -p 8083:3306 -v /home/mysql/conf:/etc/mysql/conf.d -v /home/mysql/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 --name mysql01 mysql:5.7
+```
+
+
+
+
+
+
+
+# DockerFile
+
+
+
+# Docker网络
 
 
 
