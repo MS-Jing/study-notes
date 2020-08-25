@@ -462,10 +462,40 @@ docker pull mysql:5.7
 
 #运行容器，做数据挂载
 -e 配置数据库的root用户密码
-[root@iZbp138sn4z9yrtqweb5brZ conf]# docker run -d -p 8083:3306 -v /home/mysql/conf:/etc/mysql/conf.d -v /home/mysql/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 --name mysql01 mysql:5.7
+[root@iZbp138sn4z9yrtqweb5brZ conf]# docker run -d -p 3306:3306 -v /home/mysql/conf:/etc/mysql/conf.d -v /home/mysql/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 --name mysql01 mysql:5.7
 ```
 
 
+
+## 具名和匿名挂载
+
+```shell
+#具名挂载
+#通过 -v 卷名：容器内路径
+docker run -d -p --name nginx02 -v juming-nginx(卷名，不是路径):/etc/nginx nginx
+# 查看该卷
+docker vloume inspect juming-nginx
+
+#匿名挂载   -v只写了容器内的路径，没有写容器外的路径
+-v 容器内路径
+-P 随机指定端口
+docker run -d -P --name nginx01 -v /etc/nginx nginx
+
+# 查看所有volume(卷)的情况
+docker volume ls
+```
+
+
+
+## 数据卷容器
+
+```shell
+# bbb和ccc两个容器通过--volumes-from来共享aaa的挂载文件，达到三个容器的/home/aaa文件同步
+
+[root@iZbp138sn4z9yrtqweb5brZ ~]# docker run -d --name aaa -v /home/aaa tomcat02:1.0
+[root@iZbp138sn4z9yrtqweb5brZ ~]# docker run -d --name bbb --volumes-from aaa tomcat02:1.0
+[root@iZbp138sn4z9yrtqweb5brZ ~]# docker run -d --name ccc --volumes-from aaa tomcat02:1.0
+```
 
 
 
@@ -473,9 +503,184 @@ docker pull mysql:5.7
 
 # DockerFile
 
+Dockerfile 就是用来构建docker镜像的构建文件！  就是一个命令脚本
+
+构建步骤：
+
++ 编写一个dockerfile文件
++ docker build 构建成为一个镜像
++ docker run 运行镜像
++ docker push 发布镜像（DockerHub，阿里云镜像仓库）
+
+## 构建过程
+
+**基础知识：**
+
++ 每一个保留关键字都必须是大写字母
++ 执行从上到下执行
++ #为注释
++ 每一个指令都会创建提交一个新的镜像层，并提交
+
+DockerFile：构建文件，定义了一切的步骤，源代码
+
+DockerImages：通过DockerFile构建生成的镜像
+
+Docker容器：容器就是镜像运行起来提供的服务
+
+
+
+## DockerFile的指令
+
+```shell
+FROM			#基础镜像
+MATNITAINER		#镜像的维护者 姓名+邮箱
+RUN				#镜像构建时运行的命令
+ADD				#添加内容
+WORKDIR			#镜像的工作目录
+VOLUME			#挂载的目录
+EXPOSE			#暴露端口配置
+CMD				#指定容器启动时运行的命令，只有最后一个会生效，可以被替代
+ENTRYPOINT		#指定容器启动时运行的命令，可以追加命令
+ONBUILD			#当构建一个被集成DockerFile时运行，触发指令
+COPY			#类型ADD，将文件拷贝到镜像中
+ENV				#构建时设置环境变量
+```
+
+## 实战：搭建自己的Centos
+
+> 编写dockerfile文件
+
+```shell
+FROM centos
+MAINTAINER Lj<1126184155@qq.com>
+
+ENV MYPATH /usr/local
+WORKDIR $MYPATH
+
+RUN yum -y install vim
+RUN yum -y install net-tools
+
+EXPOSE 8080
+
+CMD echo $MYPATH
+CMD echo "---end----"
+CMD /bin/bash
+```
+
+> 构建镜像
+
+```shell
+docker build -f dockerfile-centos -t mycentos:0.1 .
+-f	#通过dockerfile构建
+-t  #文件名和版本号
+```
+
+> 查看镜像构建历史
+
+```shell
+docker history mycentos:0.1
+```
+
+
+
+## 实战：JDK+Tomcat
+
+```shell
+FROM centos
+MAINTAINET Lj<1126184155@qq.com>
+
+COPY readme.txt /usr/local/reame.txt
+
+ADD jdk-8u211-linux-x64.tar.gz /usr/local/
+ADD apache-tomcat-8.5.57.tar.gz /usr/local/
+
+RUN yum -y install vim
+
+ENV MYPATH /usr/local
+WORKDIR $MYPATH
+
+ENV JAVA_HOME /usr/local/jdk1.8.0_211
+ENV CLASSPATH $JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+ENV CATALINA_HOME /usr/local/apache-tomcat-8.5.57
+ENV CATALINA_BASH /usr/local/apache-tomcat-8.5.57
+ENV PATH $PATH:$JAVA_HOME/bin:$CATALINA_HOME/lib:$CATALINA_HOME/bin
+
+EXPOSE 8080
+
+CMD /usr/local/apache-tomcat-8.5.57/bin/startup.sh && tail -F /usr/local/apache-tomcat-8.5.57/bin/logs/catalina.out
+```
+
+```shell
+docker build -f DockerFile -t mytomcat:1.0 .
+```
+
+
+
+## 发布自己的镜像
+
+> 阿里云镜像服务上
+
+1. 登录阿里云
+2. 找到容器镜像服务
+3. 创建命名空间
+4. 创建容器镜像
+
 
 
 # Docker网络
+
+## 理解Docker0
+
+1. 我们每启动一个docker容器, docker就会给docker容器分配一个ip ,我们只要安装了docker ,就会有一个网卡docker0桥接模式,使用的技术是evth-pair技术!
+2. evth-pair就是一对的虚拟设备接口，他们都是成对出现的，一段连着协议，一段彼此相连。正因为有这个特性，evth-pair充当一个桥梁，连接各种虚拟网络设备的
+
+## 容器互联 --link
+
+容器之间可以相互通过ip去ping通，但是，容器重启的话，docker会重新分配ip,那如何通过名字来访问容器呢？
+
+```shell
+docker run -d -P --name tomcat02 --link tomcat01 tomcat
+```
+
+这样Tomcat02和Tomcat01这两个容器就连通了
+
+
+
+## 自定义网络
+
+
+
+
+
+
+
+## 网络连通
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
