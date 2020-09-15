@@ -533,7 +533,7 @@ Docker容器：容器就是镜像运行起来提供的服务
 
 ```shell
 FROM			#基础镜像
-MATNITAINER		#镜像的维护者 姓名+邮箱
+MAINTAINER		#镜像的维护者 姓名+邮箱
 RUN				#镜像构建时运行的命令
 ADD				#添加内容
 WORKDIR			#镜像的工作目录
@@ -587,7 +587,7 @@ docker history mycentos:0.1
 
 ```shell
 FROM centos
-MAINTAINET Lj<1126184155@qq.com>
+MAINTAINER Lj<1126184155@qq.com>
 
 COPY readme.txt /usr/local/reame.txt
 
@@ -633,6 +633,7 @@ docker build -f DockerFile -t mytomcat:1.0 .
 
 1. 我们每启动一个docker容器, docker就会给docker容器分配一个ip ,我们只要安装了docker ,就会有一个网卡docker0桥接模式,使用的技术是evth-pair技术!
 2. evth-pair就是一对的虚拟设备接口，他们都是成对出现的，一段连着协议，一段彼此相连。正因为有这个特性，evth-pair充当一个桥梁，连接各种虚拟网络设备的
+3. docker0：默认网络，容器名不能直接访问
 
 ## 容器互联 --link
 
@@ -648,11 +649,34 @@ docker run -d -P --name tomcat02 --link tomcat01 tomcat
 
 ## 自定义网络
 
+```shell
+docker network ls #查看所有docker网卡
 
+#网络模式
++ bridge: 桥接，在docker容器搭桥（默认）
++ none: 不配置网络
++ host: 和宿主机共享网络
++ container: 容器内网络连通
 
+```
 
+```shell
+#自定义网络
+docker network create -d bridge --subnet 192.168.0.0/16 --gateway 192.168.0.1 mynet
 
+-d: 网络模式
+--subnet: 网卡拥有的网段
+--gateway: 从哪个网段出去
+mynet为该网络的名称
 
+#查看网卡信息
+docker network inspect mynet
+
+#启动一个tomcat容器，使用自定义网络
+docker run -d -p 8080:8080 --name tomcat-net-01 --net mynet tomcat:8.5
+
+#自定义的网络容器之间可以相互通过容器名ping通
+```
 
 ## 网络连通
 
