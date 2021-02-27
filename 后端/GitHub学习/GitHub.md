@@ -171,3 +171,18 @@
 
 恢复现场：`git stash pop`
 
+# git子模块
+
++ 在码云创建main父仓库，并创建两个model子仓库
+
++ 父仓库添加子仓库：`git submodule add 子仓库地址`
+
++ 当再次克隆父仓库是，初始化所有子模块：`git submodule update --init --recursive`
+
++ 子模块从远程拉取：`git pull <remote> <branch>`例如`git pull origin master`
++ 查看所有的子模块`git submodule`
++ 删除子模块
+  + `git submodule deinit model2`,
+  + `git rm model2`
+  + .git\modules文件下所有关于要删除的模块删除即可
+

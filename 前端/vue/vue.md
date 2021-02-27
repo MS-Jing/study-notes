@@ -1040,9 +1040,9 @@ Main.Vue修改代码：
 
 ```js
 children:[
-        {path:"/user/profile/:id",name:"profile",component:Profile},
-        {path:"/user/list",component:List}
-      ]
+    {path:"/user/profile/:id",name:"profile",component:Profile},
+    {path:"/user/list",component:List}
+]
 ```
 
 profile组件：
