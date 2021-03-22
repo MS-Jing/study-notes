@@ -30,11 +30,12 @@
   + --topic：指定了所要创建主题的名称
   + --partitions：指定了分区个数
   + --replication-factor：指定了副本因子
-
 + 展示所有主题
   + `bin/kafka-topics.sh --zookeeper localhost:2181 --list`
 + 查看主题详情
   + `bin/kafka-topics.sh --zookeeper localhost:2181 --describe --topic testtopic `
++ 删除主题
+  + `bin/kafka-topics.sh --delete --zookeeper localhost:2181 --topic testtopic `
 
 ---
 
@@ -83,12 +84,11 @@
 ```java
 package com.lj.kafkalearn.chapter1;
 
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 import java.util.Properties;
+import java.util.concurrent.Future;
 
 /*
 生产者
@@ -104,26 +104,47 @@ public class ProducerFastStart {
         properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
 
         //设置重试次数
-        properties.put(ProducerConfig.RETRIES_CONFIG,10);
+        properties.put(ProducerConfig.RETRIES_CONFIG, 10);
 
         //设置值序列化器
-        properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,StringSerializer.class.getName());
+        properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
 
         //设置集群地址
-        properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,brokerList);
+        properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
 
         KafkaProducer<String, String> producer = new KafkaProducer<String, String>(properties);
         ProducerRecord<String, String> record = new ProducerRecord<>(topic, "kafka-demo", "hello kafka!bbb");
 
         try {
-            producer.send(record);
-        }catch (Exception e){
+            /**
+             * 同步发送
+             * Future<RecordMetadata> send = producer.send(record);
+             *             RecordMetadata recordMetadata = send.get();
+             *             System.out.println("topic:"+recordMetadata.topic());
+             *             System.out.println("partition:"+recordMetadata.partition());
+             *             System.out.println("offset:"+recordMetadata.offset());
+             */
+
+            /**
+             * 异步发送
+             * */
+            producer.send(record, (RecordMetadata recordMetadata, Exception e) -> {
+                if (e == null) {  //如果没有出现异常
+                    System.out.println("topic:" + recordMetadata.topic());
+                    System.out.println("partition:" + recordMetadata.partition());
+                    System.out.println("offset:" + recordMetadata.offset());
+                }
+            });
+
+
+        } catch (Exception e) {
             e.printStackTrace();
-        }finally {
+        } finally {
             producer.close();
         }
     }
 }
+
 ```
 
 ```java
@@ -177,11 +198,16 @@ public class ConsumerFastStart {
 
 
 
+# 消费者--自动提交（默认）
+
+将`enable.auto.commit`设置为true.消费者会在poll方法调用后每隔5秒（`auto.commit.interval.ms`指定）提交一次。
 
 
 
+# 消费者--同步提交
 
+`consumer.commitSync();`
 
+# 消费者--异步提交
 
-
-
+`consumer.commitAsync();`
