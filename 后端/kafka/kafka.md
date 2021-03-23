@@ -211,3 +211,164 @@ public class ConsumerFastStart {
 # 消费者--异步提交
 
 `consumer.commitAsync();`
+
+# 消费组管理
+
++ 查看消费组
+  + `bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --list`
+
++ 消费组详情信息
+  + `kafka-consumer-groups.bat --bootstrap-server localhost:9092 --describe --group group.demo`
+
++ 查看消费组状态
+  + `kafka-consumer-groups.bat --bootstrap-server localhost:9092 --describe --group group.demo --state`
++ 消费组内成员的信息
+  + `kafka-consumer-groups.bat --bootstrap-server localhost:9092 --describe --group group.demo --members`
++ 删除消费组
+  + `kafka-consumer-groups.bat --bootstrap-server localhost:9092 --delete --group group.demo`
+
+# SpringBoot kafka
+
+依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.kafka</groupId>
+    <artifactId>spring-kafka</artifactId>
+</dependency>
+```
+
+配置：
+
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092    #集群用,号隔开
+```
+
+生产者：
+
+```java
+@RestController
+public class KafkaProducer {
+    @Autowired
+    private KafkaTemplate<String, Object> kafkaTemplate;
+
+    // 发送消息
+    @GetMapping("/kafka/normal/{message}")
+    public void sendMessage1(@PathVariable("message") String normalMessage) {
+        kafkaTemplate.send("testtopic", normalMessage);
+    }
+}
+```
+
+消费者：
+
+```java
+@Component
+public class KafkaConsumer {
+    // 消费监听
+    @KafkaListener(topics = {"testtopic"},groupId = "group.demo")
+    public void onMessage1(ConsumerRecord<?, ?> record) {
+        System.out.println("主题：" + record.topic() + " 分区：" + record.partition() + " 内容：" + record.value());
+    }
+}
+```
+
+## 事务
+
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092    #集群用,号隔开
+    producer:
+      transaction-id-prefix: kafka_tx.    #事务的支持
+```
+
+```java
+@GetMapping("/kafka/normal/{message}")
+public void sendMessage1(@PathVariable("message") String normalMessage) {
+    //        kafkaTemplate.send("testtopic", normalMessage);
+    kafkaTemplate.executeInTransaction(t->{
+        t.send("testtopic", normalMessage);
+        if ("error".equals(normalMessage)){
+            throw new RuntimeException();
+        }
+        t.send("testtopic","bbbbbb");
+        return true;
+    });
+}
+```
+
+方式二：注解的方式
+
+```java
+//第二种方式
+@GetMapping("/kafka/normal2/{message}")
+@Transactional(rollbackFor = RuntimeException.class)
+public void sendMessage2(@PathVariable("message") String normalMessage) {
+    kafkaTemplate.send("testtopic", normalMessage);
+    if ("error".equals(normalMessage)) {
+        throw new RuntimeException();
+    }
+    kafkaTemplate.send("testtopic", "bbbbbb");
+}
+```
+
+
+
+## springboot 开始/停止消费者的监听
+
+```java
+@Configuration
+public class KafkaConfig {
+
+    @Autowired
+    private ConsumerFactory consumerFactory;
+
+    // 监听器容器工厂(设置禁止KafkaListener自启动)
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory delayContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory container = new ConcurrentKafkaListenerContainerFactory();
+        container.setConsumerFactory(consumerFactory);
+        //禁止KafkaListener自启动
+//        container.setAutoStartup(false);
+        return container;
+
+    }
+}
+```
+
+```java
+@Component
+public class KafkaConsumer {
+
+    private static final Logger logger = LoggerFactory.getLogger(KafkaConsumer.class);
+    // 消费监听
+    @KafkaListener(id = "test",topics = {"testtopic"},groupId = "group.demo")
+    public void onMessage1(ConsumerRecord<?, ?> record) {
+        logger.info("主题：" + record.topic() + " 分区：" + record.partition() + " 内容：" + record.value());
+    }
+}
+```
+
+```java
+@Component
+public class LogListener implements ApplicationListener<ContextClosedEvent> {
+
+    /**
+     * @KafkaListener注解所标注的方法并不会在IOC容器中被注册为Bean，
+     * 而是会被注册在KafkaListenerEndpointRegistry中，
+     * 而KafkaListenerEndpointRegistry在SpringIOC中已经被注册为Bean
+     **/
+    @Autowired
+    private KafkaListenerEndpointRegistry registry;
+
+    @Override
+    public void onApplicationEvent(ContextClosedEvent contextClosedEvent) {
+        System.out.println("================容器即将关闭====================");
+        registry.getListenerContainer("test").pause();
+    }
+}
+```
+
