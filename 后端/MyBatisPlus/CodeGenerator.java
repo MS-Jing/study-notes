@@ -3,11 +3,17 @@ package com.lj;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.core.toolkit.StringPool;
 import com.baomidou.mybatisplus.generator.AutoGenerator;
+import com.baomidou.mybatisplus.generator.InjectionConfig;
 import com.baomidou.mybatisplus.generator.config.*;
 import com.baomidou.mybatisplus.generator.config.po.TableFill;
+import com.baomidou.mybatisplus.generator.config.po.TableInfo;
 import com.baomidou.mybatisplus.generator.config.rules.DateType;
 import com.baomidou.mybatisplus.generator.config.rules.NamingStrategy;
+import com.baomidou.mybatisplus.generator.engine.AbstractTemplateEngine;
+import com.baomidou.mybatisplus.generator.engine.FreemarkerTemplateEngine;
+import com.baomidou.mybatisplus.generator.engine.VelocityTemplateEngine;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -28,16 +34,16 @@ public class CodeGenerator {
     private static final String passWord = "root";
 
     private static final String packageParent = "com.lj";  //包名
-    private static final String moduleName = "eduservice"; //模块名
+    private static final String moduleName = "eduservice111"; //模块名
 
     private static final String[] includes = new String[]{"edu_course","edu_course_description","edu_chapter","edu_video"}; //要生成的表名
+    private static final Class<? extends AbstractTemplateEngine> templateEngine = VelocityTemplateEngine.class;   //模板引擎
 
-
-    public static void globalConfig(AutoGenerator generator) {
+    private void globalConfig(AutoGenerator generator) {
         // 2、全局配置
         GlobalConfig gc = new GlobalConfig();
         String projectPath = System.getProperty("user.dir");
-//        System.out.println(projectPath);
+        System.out.println("生成位置："+projectPath);
         gc.setOutputDir(projectPath + "/src/main/java");
         gc.setAuthor(author);
         gc.setOpen(false); //生成后是否打开资源管理器
@@ -49,7 +55,7 @@ public class CodeGenerator {
         generator.setGlobalConfig(gc);
     }
 
-    public static void dataSourceConfig(AutoGenerator generator) {
+    private void dataSourceConfig(AutoGenerator generator) {
         // 3、数据源配置
         DataSourceConfig dsc = new DataSourceConfig();
         dsc.setUrl(url);
@@ -60,7 +66,7 @@ public class CodeGenerator {
         generator.setDataSource(dsc);
     }
 
-    public static void packageConfig(AutoGenerator generator) {
+    private void packageConfig(AutoGenerator generator) {
         // 4、包配置
         PackageConfig pc = new PackageConfig();
         pc.setParent(packageParent);
@@ -72,7 +78,7 @@ public class CodeGenerator {
         generator.setPackageInfo(pc);
     }
 
-    public static void strategyConfig(AutoGenerator generator) {
+    private void strategyConfig(AutoGenerator generator) {
         // 5、策略配置
         StrategyConfig strategy = new StrategyConfig();
         strategy.setInclude(includes);
@@ -101,21 +107,57 @@ public class CodeGenerator {
     }
 
     //自定义模板配置
-//    public static void templateConfig(AutoGenerator generator){
-//        TemplateConfig templateConfig = new TemplateConfig();
-//        templateConfig.setController("templates/controller.java");
-//        generator.setTemplate(templateConfig);
-//    }
+    private void templateConfig(AutoGenerator generator){
+        // 自定义配置
+        InjectionConfig cfg = new InjectionConfig() {
+            @Override
+            public void initMap() {
+                // to do nothing
+            }
+        };
 
+        String templatePath = null;
+        if (templateEngine.equals(FreemarkerTemplateEngine.class)){
+            templatePath = "/templates/mapper.xml.ftl";
+        }else if (templateEngine.equals(VelocityTemplateEngine.class)){
+            templatePath = "/templates/mapper.xml.vm";
+        }
+
+        // 自定义输出配置
+        List<FileOutConfig> focList = new ArrayList<>();
+        // 自定义配置会被优先输出
+        focList.add(new FileOutConfig(templatePath) {
+            @Override
+            public String outputFile(TableInfo tableInfo) {
+                // 自定义输出文件名
+                return System.getProperty("user.dir") + "/src/main/resources/mapper/" + moduleName
+                        + "/" + tableInfo.getEntityName() + "Mapper" + StringPool.DOT_XML;
+            }
+        });
+        cfg.setFileOutConfigList(focList);
+        generator.setCfg(cfg);
+
+        // 配置模板
+        TemplateConfig templateConfig = new TemplateConfig();
+        //指定自定义模板路径，注意不要带上.ftl/.vm, 会根据使用的模板引擎自动识别
+        //templateConfig.setController("templates/controller.java");  资源目录下
+        templateConfig.setXml(null);  //配置了自定义xml输出
+        generator.setTemplate(templateConfig);
+    }
+
+    private void templateEngineConfig(AutoGenerator generator) throws IllegalAccessException, InstantiationException {
+        AbstractTemplateEngine abstractTemplateEngine = templateEngine.newInstance();
+        generator.setTemplateEngine(abstractTemplateEngine);
+    }
 
     @Test
-    public void run() {
+    public void run() throws InstantiationException, IllegalAccessException {
 
         // 1、创建代码生成器
         AutoGenerator mpg = new AutoGenerator();
+
         // 2、全局配置
         globalConfig(mpg);
-//        templateConfig(mpg);
 
         // 3、数据源配置
         dataSourceConfig(mpg);
@@ -123,10 +165,17 @@ public class CodeGenerator {
         // 4、包配置
         packageConfig(mpg);
 
-        // 5、策略配置
+        //5、模板引擎配置
+        templateEngineConfig(mpg);
+
+        //6、自定义模板配置
+        templateConfig(mpg);
+
+        //7、策略配置
         strategyConfig(mpg);
 
-        // 6、执行
+        //8、执行
         mpg.execute();
+
     }
 }
