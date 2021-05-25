@@ -686,21 +686,103 @@ docker run -d -p 8080:8080 --name tomcat-net-01 --net mynet tomcat:8.5
 
 
 
+# Docker Compose
 
+高效管理容器。定义运行多个容器！
 
+## 安装
 
+**下载**
 
++ ```bash
+  sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  
+  # 国内镜像
+  curl -L https://get.daocloud.io/docker/compose/releases/download/1.25.5/docker-compose-`uname -s`-`uname -m` > /usr/local/bin/docker-compose
+  ```
 
+**给该文件授权可执行**
 
++ `sudo chmod +x /usr/local/bin/docker-compose`
 
+## 快速开始
 
+```bash
+[root@localhost home]# mkdir composetest
+[root@localhost home]# cd composetest
+```
 
+**创建app.py**
 
+```python
+import time
 
+import redis
+from flask import Flask
 
+app = Flask(__name__)
+cache = redis.Redis(host='redis', port=6379)
 
+def get_hit_count():
+    retries = 5
+    while True:
+        try:
+            return cache.incr('hits')
+        except redis.exceptions.ConnectionError as exc:
+            if retries == 0:
+                raise exc
+            retries -= 1
+            time.sleep(0.5)
 
+@app.route('/')
+def hello():
+    count = get_hit_count()
+    return 'Hello World! I have been seen {} times.\n'.format(count)
+```
 
+**创建 requirements.txt** 
+
+```txt
+flask
+redis
+```
+
+**创建一个Dockerfile**
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM python:3.7-alpine
+WORKDIR /code
+ENV FLASK_APP=app.py
+ENV FLASK_RUN_HOST=0.0.0.0
+RUN apk add --no-cache gcc musl-dev linux-headers
+COPY requirements.txt requirements.txt
+RUN pip install -r requirements.txt
+EXPOSE 5000
+COPY . .
+CMD ["flask", "run"]
+```
+
+**在Compose file( docker-compose.yml )定义一个services**
+
+```yaml
+version: "3.9"
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+  redis:
+    image: "redis:alpine"
+```
+
+**执行**
+
++ `docker-compose up` 如果没有相关镜像和容器则先build在启动容器
++ `docker-compose up --build`  从新生成镜像和容器再启动
++ `docker-compose up -d`  后台启动
+
++ `docker-compose down`  停止相关容器和删除相关容器
 
 
 
