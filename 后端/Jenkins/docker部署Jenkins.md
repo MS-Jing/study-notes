@@ -177,6 +177,7 @@ public class TestController {
 
 + 配置成功后关闭终端，从新连接
 + 在任意目录输入`mvn -version` 没有提示mvn 命令找不到说明配置完成
+  
   + 如果提示找不到java 命令，只是说明你没有安装java环境。根据你自己的需要是否安装，这里可以不安（jenkins容器里有openjdk环境）
 
 
@@ -214,6 +215,201 @@ public class TestController {
 + docker-compose启动Jenkins  `docker-compose up`，然后等待启动（如果上面照着做没问题的话这里应该是可以启动的）
 
 ![](.\img\8.png)
+
+
+
+## 基础配置
+
++ 进入界面   端口是你映射的端口
+
+![](.\img\9.png)
+
++ 安装推荐插件
+
+![](.\img\10.png)
+
++ 安装过程要等会，emmmm可以去喝杯水上个厕所。如果失败重试一下
+
+![](.\img\11.png)
+
++ 直接使用admin用户
+
+![](.\img\12.png)
+
++ 之后保存并完成，然后重启（如果你觉得重启慢的话，去终端另开一个端口，用docker restart 容器id  重启容器）。重启好了页面要刷新一下，不然一直等待页面
+
+![](.\img\13.png)
+
++ 使用admin用户登录
+
+![](.\img\14.png)
+
+### 全局安全配置
+
+![](.\img\15.png)
+
+![](.\img\16.png)
+
+### 全局工具配置
+
+![](.\img\17.png)
+
+> ​	通过 docker exec -it 容器id /bin/bash                进入容器（以下参数全是容器中的参数）
+>
+> + 获取Maven的settings配置路径
+> ![](.\img\18.png)
+> + 获取环境变量JAVA_HOME
+>
+> ![](.\img\19.png)
+>
+> + 获取环境变量MAVEN_HOME
+>
+> ![](.\img\20.png)
+
+![](.\img\21.png)
+
+> 配置JAVA_HOME时把自动安装取消就可以了
+
+![](.\img\22.png)
+
+> Maven同上     git直接用容器默认的
+
+![](.\img\23.png)
+
+### 插件管理
+
+![](.\img\24.png)
+
++ 安装Publish Over SSH插件 选中然后下载（我这里截图没来得及选）
+
+![](.\img\25.png)
+
++ 等待下载完成重启一下容器就完成了（重启后记得刷新页面），之后要用的时候再配置
+
+```bash
+# 查看密码
+[root@lj jenkins]# cat data/secrets/initialAdminPassword 
+a86*********************26
+```
+
+# 第一个任务
+
+![](.\img\26.png)
+
+![](.\img\27.png)
+
+## 源码管理
+
+![](.\img\28.png)
+
+![](.\img\29.png)
+
+## 构建
+
+![](.\img\30.png)
+
+![](.\img\31.png)
+
+## 测试构建
+
+![](.\img\32.png)
+
+项目在打包构建时有点慢，因为要下载相关Maven依赖，别急，去喝口水走走！！
+
+![](.\img\33.png)
+
+搞定了，Jenkins已经帮我们从远程仓库自动拉取代码然后打包好了，回到工程去看一下
+
+![](.\img\34.png)
+
+然后点击工作区，这个目录熟不熟悉？？哈哈哈。进去target目录查看打包好的jar包吧
+
+![](.\img\35.png)
+
+
+
+# 使用Gitee来触发项目构建
+
+>  **上面我们完成了Jenkins的基本构建。但是，我们在实际业务中不是去手动点击立即构建让Jenkins去构建。这tm的算什么自动构建啊！我们程序员写完代码后本地测试没问题了就会通过git的`git push`推送到远程代码仓库，我们要做到远程代码仓库接收到了新的推送然后去触发Jenkins的构建功能达到自动构建的效果！！！别急慢慢来会很快的！**
+>
+> [Gitee官方提供的帮助文档](https://gitee.com/help/articles/4193#article-header0)
+
+## 安装插件
+
+> 和刚才安装 Publish Over SSH插件插件一样  
+
++ 点击最上角 Dashboard 进到首页。然后   系统管理 -> 插件管理 -> 可选插件   搜索Gitee
+
+![](.\img\36.png)
+
+安装完成了记得重启
+
+## 插件配置
+
+系统管理 -> 系统配置 -> Gitee 配置
+
+> 先去Gitee生成API 令牌   https://gitee.com/profile/personal_access_tokens
+>
+> ![](.\img\37.png)
+>
+> ![](.\img\38.png)
+>
+>
+> ![](.\img\39.png)
+
+
+
+![](.\img\40.png)
+
+![](.\img\41.png)
+
+点击高级根据你的需求选择 再点击测试连接
+
+![](.\img\42.png)
+
+**插件配置完成！！**
+
+## 任务配置
+
+> 进入我们jenkins_test任务，左边导航栏有个配置点击进入
+
+### Gitee链接
+
+选择我们刚才配置的链接
+
+![](.\img\43.png)
+
+###  源码管理配置
+
+在源码管理点击高级
+
+![](.\img\44.png)
+
+###  触发器配置
+
+![](.\img\45.png)
+
+![](.\img\46.png)
+
+**==保存！！！！！！！==**
+
+> **去你的Gitee代码仓库配置WebHook**
+>
+> 管理  ->  WebHooks -> 添加webHook
+>
+> ![](.\img\47.png)
+
+## 测试
+
+> 去我们之前的示例项目里随便做点修改然后git push到远程仓库试试
+
+![](.\img\48.png)
+
+![](.\img\49.png)
+
+**测试成功！！！**
+
+
 
 
 
