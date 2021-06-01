@@ -643,7 +643,7 @@ docker build -f DockerFile -t mytomcat:1.0 .
 docker run -d -P --name tomcat02 --link tomcat01 tomcat
 ```
 
-这样Tomcat02和Tomcat01这两个容器就连通了
+这样Tomcat02和Tomcat01这两个容器就连通了（本质其实就是host映射）
 
 
 
