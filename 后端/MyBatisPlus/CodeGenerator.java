@@ -1,4 +1,4 @@
-package com.lj;
+package com.lj.ucenter;
 
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.annotation.FieldFill;
@@ -34,9 +34,10 @@ public class CodeGenerator {
     private static final String passWord = "root";
 
     private static final String packageParent = "com.lj";  //包名
-    private static final String moduleName = "eduservice111"; //模块名
+    private static final String moduleName = "ucenter"; //模块名
 
-    private static final String[] includes = new String[]{"edu_course","edu_course_description","edu_chapter","edu_video"}; //要生成的表名
+    private static final String[] includes = new String[]{"ucenter_member"}; //要生成的表名
+    private static final Boolean rm_prefix = false; //去除表前缀  _
     private static final Class<? extends AbstractTemplateEngine> templateEngine = VelocityTemplateEngine.class;   //模板引擎
 
     private void globalConfig(AutoGenerator generator) {
@@ -85,11 +86,13 @@ public class CodeGenerator {
         strategy.setNaming(NamingStrategy.underline_to_camel);//数据库表映射到实体的命名策略
 
         //生成实体时去掉表前缀
-        List<String> tablePrefixs = new ArrayList<>();
-        for (String s : strategy.getInclude()) {
-            tablePrefixs.add(s.split("_")[0] + "_");
+        if (rm_prefix){
+            List<String> tablePrefixs = new ArrayList<>();
+            for (String s : strategy.getInclude()) {
+                tablePrefixs.add(s.split("_")[0] + "_");
+            }
+            strategy.setTablePrefix(tablePrefixs.toArray(new String[tablePrefixs.size()]));
         }
-        strategy.setTablePrefix(tablePrefixs.toArray(new String[tablePrefixs.size()]));
 
         //填充生成和更新时间的注解
         List<TableFill> tableFills = new ArrayList<>();
