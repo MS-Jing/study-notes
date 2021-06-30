@@ -25,7 +25,7 @@ then
 		if [[ $pid0 == "" ]]
 		then
 			echo "服务【$target】已停止"
-			break
+			exit
 		fi
 		sleep 3s
 		let "int++"
