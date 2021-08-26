@@ -166,16 +166,27 @@ private static List<SLF4JServiceProvider> findServiceProviders() {
 >    ```
 >  ```
 > 
+>  ```
+>
+> ```
+> 
+> ```
+>
+> ```
+> 
 > + 实现类
 > 
 >   + ```java
 >  public class UserImpl implements User {
->      @Override
->      public String toString() {
->          return "aaa";
->      }
+>  @Override
+>  public String toString() {
+>  return "aaa";
 >  }
->  ```
+>  }
+> ```
+> ```
+> 
+> ```
 >
 > + 在resources目录下创建META-INF/services/com.lj.mpdemo.User文件
 >
@@ -184,17 +195,24 @@ private static List<SLF4JServiceProvider> findServiceProviders() {
 >    ```
 >  ```
 > 
+>  ```
+>
+> ```
+> 
 > + 测试
 > 
 >   + ```java
 >  public static void main(String[] args) {
->      ServiceLoader<User> users = ServiceLoader.load(User.class);
->      for (User user : users) {
->          System.out.println(user);
->      }
+>  ServiceLoader<User> users = ServiceLoader.load(User.class);
+>  for (User user : users) {
+>  System.out.println(user);
+>  }
 >  }
 >  // 结果 aaa
->  ```
+> ```
+> ```
+> 
+> ```
 
 # slf4j源码阅读（1.7.30）
 
@@ -350,7 +368,8 @@ void init() {
         if (!StatusUtil.contextHasStatusListener(defaultLoggerContext)) {
             StatusPrinter.printInCaseOfErrorsOrWarnings(defaultLoggerContext);
         }
-        // 对ContextSelectorStaticBinder类进行初始化
+        // 对ContextSelectorStaticBinder类进行初始化，
+        // 这里判断选择器，其实追一下源码什么也没做
         contextSelectorBinder.init(defaultLoggerContext, KEY);
         initialized = true;
     } catch (Exception t) {
@@ -596,7 +615,7 @@ Logger实现的接口：
 public final class Logger implements org.slf4j.Logger, LocationAwareLogger, AppenderAttachable<ILoggingEvent>, Serializable
 ```
 
-他实现了org.slf4j.Logger的接口，所以我们使用slf4j的info(),实际是调logback的info(),还实现了`AppenderAttachable<ILoggingEvent>`，内部还有一个`transient private AppenderAttachableImpl<ILoggingEvent> aai;`字段，所以AppenderAttachable接口的方法其实是由Logger代理aai的真实对象来完成操作的，这里用到了**==静态代理模式==**
+他实现了org.slf4j.Logger的接口，所以我们使用slf4j的info(),实际是调logback的info()。还实现了`AppenderAttachable<ILoggingEvent>`接口，内部还有一个`transient private AppenderAttachableImpl<ILoggingEvent> aai;`字段，所以AppenderAttachable接口的方法其实是由Logger代理aai的真实对象来完成操作的，这里用到了**==静态代理模式==**
 
 Logger的字段介绍：
 
@@ -613,7 +632,7 @@ transient private int effectiveLevelInt;
 transient private Logger parent;
 // 子Logger
 transient private List<Logger> childrenList;
-// 所依附的所有Appender
+// 所依附的所有Appender集合
 transient private AppenderAttachableImpl<ILoggingEvent> aai;
 // 是否继承父类Logger的Appender（为true的话如果子Logger写了日志父Logger也会写）
 transient private boolean additive = true;
@@ -671,18 +690,309 @@ private void buildLoggingEventAndAppend(final String localFQCN, final Marker mar
 ```java
 public void callAppenders(ILoggingEvent event) {
     int writes = 0;
+    //每次循环都会调用当前Logger的appendLoopOnAppenders(event)方法
+    //然后再指向自己的父Logger再去调用，知道父Logger的additive为false
     for (Logger l = this; l != null; l = l.parent) {
         writes += l.appendLoopOnAppenders(event);
         if (!l.additive) {
             break;
         }
     }
-    // No appenders in hierarchy
+    // 如果一个Appender都没有和当前Logger关联（依附）就走这里
+    // 这里会抛出一个警告说没有一个Appender和当前Logger进行关联
     if (writes == 0) {
         loggerContext.noAppenderDefinedWarning(this);
     }
 }
 ```
 
- 该方法会调用此Logger关联的所有Appender，而且还会调用所有父Logger关联的Appender，直到遇到父Logger的additive属性设置为false为止，这也是为什么如果子Logger和父Logger都关联了同样的Appender，则日志信息会重复记录的原因 
+ 该方法会调用此Logger关联的所有Appender，而且还会调用所有父Logger关联的Appender，直到遇到父Logger的additive属性设置为false为止，这也是为什么如果子Logger和父Logger都关联了同样的Appender，则日志信息会重复记录的原因 ，这里每次都会去调用appendLoopOnAppenders(event)方法，还把刚才创建的LoggingEvent对象（LoggingEvent对象里承载了日志信息等数据，最后输出的日志信息也来源于这个类）给他了。所以我们看看appendLoopOnAppenders(event)方法：
+
+```java
+private int appendLoopOnAppenders(ILoggingEvent event) {
+    if (aai != null) {
+        return aai.appendLoopOnAppenders(event);
+    } else {
+        return 0;
+    }
+}
+```
+
+这里又调用了aai的appendLoopOnAppenders(event)方法，就是说，上层有个循环，那么会调用每个父Logger的这个方法，其实这个方法是调用当前Logger所关联（依附）的所有的Appender的doAppend()方法。
+
+```java
+public int appendLoopOnAppenders(E e) {
+    int size = 0;
+    final Appender<E>[] appenderArray = appenderList.asTypedArray();
+    final int len = appenderArray.length;
+    for (int i = 0; i < len; i++) {
+        // 在这里循环遍历的调用当前Logger依附的所有Appender的doAppend(e)方法
+        // LoggingEvent对象也给了这个方法
+        appenderArray[i].doAppend(e);
+        size++;
+    }
+    return size;
+}
+```
+
+我们可以看到AppenderAttachableImpl类里有个appenderList属性，里面包含了当前Logger依附的所有的Appender，这个方法最终返回当前Logger依附的Appender的个数
+
+到此我们知道，Logger是最终调用自己和自己的父Logger（直到父Logger的additive属性为false）的所有所依附的Appender的doAppend(e)方法来进行记录日志的。
+
+你是否有疑问，Logger什么时候依附（关联）的Appender的？应该(我的猜测)在我们前面说到的加载配置文件的时候就创建缓存了（缓存到了那个defaultLoggerContext就是后面我们使用的LoggerContext）相关的Logger并将它的Appender依附上了：
+
+```java
+new ContextInitializer(defaultLoggerContext).autoConfig();
+```
+
+# Appender的doAppend(e)是如何记录日志的？
+
+上集我们说到，Logger最终会调用自己和自己的父Logger所依附的所有Appender的doAppend(e)的方法来委托Appender组件来记录日志。我们来刨根问底，Appender的doAppend(e)方法是如何记录日志的？
+
+我们继续来看代码：
+
+```java
+public int appendLoopOnAppenders(E e) {
+    int size = 0;
+    final Appender<E>[] appenderArray = appenderList.asTypedArray();
+    final int len = appenderArray.length;
+    for (int i = 0; i < len; i++) {
+        // 在这里循环遍历的调用当前Logger依附的所有Appender的doAppend(e)方法
+        // LoggingEvent对象也给了这个方法
+        appenderArray[i].doAppend(e);
+        size++;
+    }
+    return size;
+}
+```
+
+我们进入doAppend(e)
+
+```java
+void doAppend(E event) throws LogbackException;
+```
+
+发现我们进入到了一个Appender接口的接口，这是在面向接口编程，具体的doAppend的逻辑还在具体的Appender实现类里，我们来看一下Appender的架构图
+
+![Appender架构图](https://z3.ax1x.com/2021/08/25/hV1fO0.png)
+
+Appender的架构图很庞大，我列了几个常用的来进一步学习。
+
++ Appender接口有两个实现类UnsynchronizedAppenderBase和AppenderBase，顾名思义他们俩一个是非同步的一个是同步的，一个doAppend方法加了synchronized，一个没有
++ UnsynchronizedAppenderBase，Appender接口继承了FilterAttachable接口，UnsynchronizedAppenderBase中持有一个 FilterAttachableImpl类的实例，所以可以委托他来调用FilterAttachable中的方法，所以我们使用logback的配置文件时，可以在Appender中添加filter。这个和之前Logger调用Appender的逻辑是一样的，用到了**静态代理模式**。
+
++  OutputStreamAppender ，它继承UnsynchronizedAppenderBase，是最基本的以流的形式输出的Appender，内部有一个OutputStream流。并且我们都知道，在配置文件配置appender的时候，还需要配置encoder来格式化日志信息，所以内部还有Encoder，用来在写出日志之前对日志信息进行格式化用的。他的实现类有我们最常用的FileAppender、ConsoleAppender、和RollingFileAppender。
+
+我们先来看看UnsynchronizedAppenderBase的doAppend方法是如何实现的，因为他的实现类都会先调它
+
+```java
+public void doAppend(E eventObject) {
+    
+    //这是防止Appender重复调用doAppend方法，不是重点
+    if (Boolean.TRUE.equals(guard.get())) {
+        return;
+    }
+
+    try {
+        guard.set(Boolean.TRUE);
+		// 检查Appender对象的状态
+        if (!this.started) {
+            if (statusRepeatCount++ < ALLOWED_REPEATS) {
+                addStatus(new WarnStatus("Attempted to append to non started appender [" + name + "].", this));
+            }
+            return;
+        }
+
+        // 使用我们上面说的FilterAttachableImpl的实例来检查过滤器Filter是否满足条件
+        if (getFilterChainDecision(eventObject) == FilterReply.DENY) {
+            return;
+        }
+
+        // 最后调用他的具体实现类的append()方法
+        this.append(eventObject);
+
+    } catch (Exception e) {
+        if (exceptionCount++ < ALLOWED_REPEATS) {
+            addError("Appender [" + name + "] failed to append.", e);
+        }
+    } finally {
+        guard.set(Boolean.FALSE);
+    }
+}
+```
+
+这里只是做了Appender的状态和过滤检查，最后还是调用了他的具体实现类的append()方法。这里的OutputStreamAppender就是我们常用的他的实现类，我们进去看看：
+
+```java
+@Override
+protected void append(E eventObject) {
+    if (!isStarted()) {
+        return;
+    }
+
+    subAppend(eventObject);
+}
+```
+
+这里只做了状态判断，就直接调他的subAppend(eventObject);方法了：
+
+```java
+protected void subAppend(E event) {
+    if (!isStarted()) {
+        return;
+    }
+    try {
+        // 做了预处理
+        if (event instanceof DeferredProcessingAware) {
+            ((DeferredProcessingAware) event).prepareForDeferredProcessing();
+        }
+		// 对输出的日志信息用encoder进行格式化
+        byte[] byteArray = this.encoder.encode(event);
+        //调用写出方法写出到输出流
+        writeBytes(byteArray);
+
+    } catch (IOException ioe) {
+        // as soon as an exception occurs, move to non-started state
+        // and add a single ErrorStatus to the SM.
+        this.started = false;
+        addStatus(new ErrorStatus("IO failure in appender", this, ioe));
+    }
+}
+```
+
+这里对日志信息进行格式化后调用writeBytes(byteArray);写出：
+
+```java
+private void writeBytes(byte[] byteArray) throws IOException {
+    if(byteArray == null || byteArray.length == 0)
+        return;
+
+    //加锁，防止多个线程同时操作同一个流
+    lock.lock();
+    try {
+        //将格式化好的日志信息写出到输出流中
+        this.outputStream.write(byteArray);
+        if (immediateFlush) {
+            this.outputStream.flush();
+        }
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+到此我们知道了doAppend是如何打印日志的了，OutputStreamAppender 的子类分别添加了一下特殊的功能，比如向控制台写日志，向文件写日志，按照一定的滚动策略写日志等。。最后都是调用了这里writeBytes方法写到流中，只是流是具体的流了。如果你对其他的Appender感兴趣可以研究一下。
+
+
+
+# logback是如何初始化框架的？
+
+前面我们不是有疑问，Logger的Appender是什么时候依附到Logger的？Appender的Filter和Encoder又是何时关联起来的？我们前面猜测是在加载配置文件的时候，进行了一系列初始化以后完成了这些关联操作，最后才返回日志工厂LoggerContext。现在让我们来探究一下。
+
+我们来回顾一下slf4j和logback对接的时候logback返回给了slf4j一个ILoggerFactory的日志工厂实例，就是我们的LoggerContext实例：
+
+```java
+StaticLoggerBinder.getSingleton().getLoggerFactory();
+```
+
+我们当时分析StaticLoggerBinder这个类的静态代码块中调用了init()的初始化方法：
+
+```java
+static {
+    SINGLETON.init();
+}
+void init() {
+    try {
+        try {
+            // 委托ContextInitializer类对defaultLoggerContext进行初始化。这里如果找到了任一配置文件，就会根据配置文件去初始化LoggerContext，如果没找到，会使用默认配置
+            new ContextInitializer(defaultLoggerContext).autoConfig();
+        } catch (JoranException je) {
+            Util.report("Failed to auto configure default logger context", je);
+        }
+        if (!StatusUtil.contextHasStatusListener(defaultLoggerContext)) {
+            StatusPrinter.printInCaseOfErrorsOrWarnings(defaultLoggerContext);
+        }
+        // 对ContextSelectorStaticBinder类进行初始化，
+        // 这里判断选择器，其实追一下源码什么也没做
+        contextSelectorBinder.init(defaultLoggerContext, KEY);
+        initialized = true;
+    } catch (Exception t) {
+        Util.report("Failed to instantiate [" + LoggerContext.class.getName() + "]", t);
+    }
+}
+```
+
+也就是说，在这个类加载的时候就进行对框架初始化操作，我们知道LoggerContext里缓存了所有的Logger对象，Logger对象又关联了Appender，Appender又关联了他的过滤器和Encoder。所以我们可以推测，这里委托ContextInitializer类对defaultLoggerContext进行初始化，其实是去读取了配置文件，创建了所有的相关对象缓存到了LoggerContext中
+
+我们进去ContextInitializer的构造方法看看：
+
+```java
+public ContextInitializer(LoggerContext loggerContext) {
+    this.loggerContext = loggerContext;
+}
+```
+
+这是把StaticLoggerBinder类创建好的loggerContext给到自己的loggerContext属性。什么也没做。别急，我们再看看后面调用的.autoConfig()这个方法自动配置，一看名字就知道有点东西：
+
+```java
+public void autoConfig() throws JoranException {
+    //这里其实什么都没做，可以自己追一下
+    StatusListenerConfigHelper.installIfAsked(loggerContext);
+    //查找默认配置文件，比如logback.xml文件
+    URL url = findURLOfDefaultConfigurationFile(true);
+    if (url != null) {
+        //如果找到了调用
+        configureByResource(url);
+    } else {
+        //如果没有找到用SPI的机制查找Configurator.class的配置类
+        Configurator c = EnvUtil.loadFromServiceLoader(Configurator.class);
+        if (c != null) {
+            //如果有相关的配置类把loggerContext给它让他做配置
+            try {
+                c.setContext(loggerContext);
+                c.configure(loggerContext);
+            } catch (Exception e) {
+                throw new LogbackException(String.format("Failed to initialize Configurator: %s using ServiceLoader", c != null ? c.getClass()
+                                                         .getCanonicalName() : "null"), e);
+            }
+        } else {
+            //如果既没有找到配置文件，也没有配置类就使用BasicConfigurator的配置类
+            BasicConfigurator basicConfigurator = new BasicConfigurator();
+            basicConfigurator.setContext(loggerContext);
+            basicConfigurator.configure(loggerContext);
+        }
+    }
+}
+```
+
+别急我们先俩看看如果加载到配置文件会怎么做？因为我们一般都会用配置文件来配置我们项目的日志：
+
+```java
+public void configureByResource(URL url) throws JoranException {
+    if (url == null) {
+        throw new IllegalArgumentException("URL argument cannot be null");
+    }
+    final String urlString = url.toString();
+    if (urlString.endsWith("groovy")) {
+        if (EnvUtil.isGroovyAvailable()) {
+            // avoid directly referring to GafferConfigurator so as to avoid
+            // loading groovy.lang.GroovyObject . See also http://jira.qos.ch/browse/LBCLASSIC-214
+            GafferUtil.runGafferConfiguratorOn(loggerContext, this, url);
+        } else {
+            StatusManager sm = loggerContext.getStatusManager();
+            sm.add(new ErrorStatus("Groovy classes are not available on the class path. ABORTING INITIALIZATION.", loggerContext));
+        }
+    } else if (urlString.endsWith("xml")) {
+        JoranConfigurator configurator = new JoranConfigurator();
+        configurator.setContext(loggerContext);
+        configurator.doConfigure(url);
+    } else {
+        throw new LogbackException("Unexpected filename extension of file [" + url.toString() + "]. Should be either .groovy or .xml");
+    }
+}
+```
+
+
+
+
 
