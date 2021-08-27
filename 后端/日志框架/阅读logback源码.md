@@ -174,6 +174,10 @@ private static List<SLF4JServiceProvider> findServiceProviders() {
 >
 > ```
 > 
+> ```
+>
+> ```
+> 
 > + 实现类
 > 
 >   + ```java
@@ -188,27 +192,29 @@ private static List<SLF4JServiceProvider> findServiceProviders() {
 > 
 > ```
 >
-> + 在resources目录下创建META-INF/services/com.lj.mpdemo.User文件
->
->   + ```txt
->    com.lj.demo.UserImpl
->    ```
->  ```
+> ```
 > 
->  ```
+> + 在resources目录下创建META-INF/services/com.lj.mpdemo.User文件
+> 
+>   + ```txt
+> com.lj.demo.UserImpl
+> ```
+> ```
+> 
+> ```
 >
 > ```
 > 
 > + 测试
 > 
 >   + ```java
->  public static void main(String[] args) {
->  ServiceLoader<User> users = ServiceLoader.load(User.class);
->  for (User user : users) {
->  System.out.println(user);
->  }
->  }
->  // 结果 aaa
+> public static void main(String[] args) {
+> ServiceLoader<User> users = ServiceLoader.load(User.class);
+> for (User user : users) {
+> System.out.println(user);
+> }
+> }
+> // 结果 aaa
 > ```
 > ```
 > 
@@ -965,24 +971,54 @@ public void autoConfig() throws JoranException {
 }
 ```
 
-别急我们先俩看看如果加载到配置文件会怎么做？因为我们一般都会用配置文件来配置我们项目的日志：
+我们来看一下findURLOfDefaultConfigurationFile(true)方法是如何查找配置文件的：
+
+```java
+public URL findURLOfDefaultConfigurationFile(boolean updateStatus) {
+    //获取一个类加载器
+    ClassLoader myClassLoader = Loader.getClassLoaderOfObject(this);
+    //查找系统的配置文件 logback.configurationFile
+    URL url = findConfigFileURLFromSystemProperties(myClassLoader, updateStatus);
+    if (url != null) {
+        return url;
+    }
+	//查找测试配置文件
+    url = getResource(TEST_AUTOCONFIG_FILE, myClassLoader, updateStatus);
+    if (url != null) {
+        return url;
+    }
+	//查找GROOVY配置文件
+    url = getResource(GROOVY_AUTOCONFIG_FILE, myClassLoader, updateStatus);
+    if (url != null) {
+        return url;
+    }
+	//查找默认的配置文件logback.xml
+    return getResource(AUTOCONFIG_FILE, myClassLoader, updateStatus);
+}
+```
+
+这里会逐级去查找配置文件，调用getResource()方法来加载配置文件，其实跟进Loader.getResource(filename, myClassLoader)方法，底层还是通过classLoader.getResource(resource)来加载的配置文件。加载完配置文件返回配置文件的URL对象。回到上面：
+
+别急我们先来看看如果加载到配置文件会怎么做？因为我们一般都会用配置文件来配置我们项目的日志：
 
 ```java
 public void configureByResource(URL url) throws JoranException {
+    //做了一个判空，前面都不为空才进这个方法，所以这里不会为空
     if (url == null) {
         throw new IllegalArgumentException("URL argument cannot be null");
     }
     final String urlString = url.toString();
+    //如果是groovy配置文件，有相应的配置loggerContext方法
     if (urlString.endsWith("groovy")) {
         if (EnvUtil.isGroovyAvailable()) {
-            // avoid directly referring to GafferConfigurator so as to avoid
-            // loading groovy.lang.GroovyObject . See also http://jira.qos.ch/browse/LBCLASSIC-214
             GafferUtil.runGafferConfiguratorOn(loggerContext, this, url);
         } else {
             StatusManager sm = loggerContext.getStatusManager();
             sm.add(new ErrorStatus("Groovy classes are not available on the class path. ABORTING INITIALIZATION.", loggerContext));
         }
     } else if (urlString.endsWith("xml")) {
+        //如果是xml,可能是logback.xml或者logback-test.xml\
+        //创建一个JoranConfigurator对象，然后把loggerContext和配置文件给它委托他去给loggerContext配置
         JoranConfigurator configurator = new JoranConfigurator();
         configurator.setContext(loggerContext);
         configurator.doConfigure(url);
@@ -992,7 +1028,184 @@ public void configureByResource(URL url) throws JoranException {
 }
 ```
 
+这里进入JoranConfigurator的doConfigure方法看一下如何配置的xml配置文件：
 
+```java
+public final void doConfigure(URL url) throws JoranException {
+    InputStream in = null;
+    try {
+        //通知容器使用URL配置
+        informContextOfURLUsedForConfiguration(getContext(), url);
+        //获取配置文件的连接
+        URLConnection urlConnection = url.openConnection();
+        urlConnection.setUseCaches(false);
+        in = urlConnection.getInputStream();
+        doConfigure(in, url.toExternalForm());
+    } catch (IOException ioe) {
+        String errMsg = "Could not open URL [" + url + "].";
+        addError(errMsg, ioe);
+        throw new JoranException(errMsg, ioe);
+    } finally {
+        if (in != null) {
+            try {
+                in.close();
+            } catch (IOException ioe) {
+                String errMsg = "Could not close input stream";
+                addError(errMsg, ioe);
+                throw new JoranException(errMsg, ioe);
+            }
+        }
+    }
+}
+```
+
+这里我们可以看到，这里获取了配置文件的连接再转换成InputStream流然后调用doConfigure方法：
+
+```java
+public final void doConfigure(InputStream inputStream, String systemId) throws JoranException {
+    InputSource inputSource = new InputSource(inputStream);
+    inputSource.setSystemId(systemId);
+    doConfigure(inputSource);
+}
+```
+
+这里通过配置文件的流创建了一个InputSource对象，然后把这个对象给了doConfigure(inputSource);方法：
+
+```java
+public final void doConfigure(final InputSource inputSource) throws JoranException {
+    long threshold = System.currentTimeMillis();
+    //将loggercontext和inputSource给到SaxEventRecorder
+    SaxEventRecorder recorder = new SaxEventRecorder(context);
+    //在这里配置文件流已经被转换成了SAX流了，并保存在了recorder.saxEventList字段里
+    recorder.recordEvents(inputSource);
+    doConfigure(recorder.saxEventList);
+    // no exceptions a this level
+    StatusUtil statusUtil = new StatusUtil(context);
+    if (statusUtil.noXMLParsingErrorsOccurred(threshold)) {
+        addInfo("Registering current configuration as safe fallback point");
+        registerSafeConfiguration(recorder.saxEventList);
+    }
+}
+```
+
+我们可以看到这里创建了一个SaxEventRecorder对象，并把配置文件流和loggercontext给到了它，所以我们可以肯定，这是使用SAX以流的方式来解析XML文件并配置loggercontext对象的，我们进入doConfigure方法：
+
+```java
+public void doConfigure(final List<SaxEvent> eventList) throws JoranException {
+    buildInterpreter();
+    // 防止重复配置
+    synchronized (context.getConfigurationLock()) {
+        interpreter.getEventPlayer().play(eventList);
+    }
+}
+```
+
+我们看到在配置之前调用了buildInterpreter方法：
+
+```java
+protected void buildInterpreter() {
+    RuleStore rs = new SimpleRuleStore(context);
+    addInstanceRules(rs);
+    this.interpreter = new Interpreter(context, rs, initialElementPath());
+    InterpretationContext interpretationContext = interpreter.getInterpretationContext();
+    interpretationContext.setContext(context);
+    addImplicitRules(interpreter);
+    addDefaultNestedComponentRegistryRules(interpretationContext.getDefaultNestedComponentRegistry());
+}
+```
+
+这里创建了一个SimpleRuleStore类并把LoggerContext给了它，然后掉用了一个抽象方法addInstanceRules(rs)，我们是从前面JoranConfigurator跟过来的，所以这里应该进入他的这个方法：
+
+```java
+@Override
+public void addInstanceRules(RuleStore rs) {
+    // 父类也是如此
+    super.addInstanceRules(rs);
+    rs.addRule(new ElementSelector("configuration"), new ConfigurationAction());
+    rs.addRule(new ElementSelector("configuration/contextName"), new ContextNameAction());
+    rs.addRule(new ElementSelector("configuration/contextListener"), new LoggerContextListenerAction());
+    rs.addRule(new ElementSelector("configuration/insertFromJNDI"), new InsertFromJNDIAction());
+    rs.addRule(new ElementSelector("configuration/evaluator"), new EvaluatorAction());
+    rs.addRule(new ElementSelector("configuration/appender/sift"), new SiftAction());
+    rs.addRule(new ElementSelector("configuration/appender/sift/*"), new NOPAction());
+    rs.addRule(new ElementSelector("configuration/logger"), new LoggerAction());
+    rs.addRule(new ElementSelector("configuration/logger/level"), new LevelAction());
+    rs.addRule(new ElementSelector("configuration/root"), new RootLoggerAction());
+    rs.addRule(new ElementSelector("configuration/root/level"), new LevelAction());
+    rs.addRule(new ElementSelector("configuration/logger/appender-ref"), new AppenderRefAction<ILoggingEvent>());
+    rs.addRule(new ElementSelector("configuration/root/appender-ref"), new AppenderRefAction<ILoggingEvent>());
+    rs.addRule(new ElementSelector("*/if"), new IfAction());
+    rs.addRule(new ElementSelector("*/if/then"), new ThenAction());
+    rs.addRule(new ElementSelector("*/if/then/*"), new NOPAction());
+    rs.addRule(new ElementSelector("*/if/else"), new ElseAction());
+    rs.addRule(new ElementSelector("*/if/else/*"), new NOPAction());
+    if (PlatformInfo.hasJMXObjectName()) {
+        rs.addRule(new ElementSelector("configuration/jmxConfigurator"), new JMXConfiguratorAction());
+    }
+    rs.addRule(new ElementSelector("configuration/include"), new IncludeAction());
+    rs.addRule(new ElementSelector("configuration/consolePlugin"), new ConsolePluginAction());
+    rs.addRule(new ElementSelector("configuration/receiver"), new ReceiverAction());
+}
+```
+
+我们可以看到，这是将我们在xml中配置的元素给SimpleRuleStore对象，然后还有对应匹配的Action对象。也就是说，我们不同的元素标签将由不同的Action对象来解析完成。我们回到buildInterpreter()方法：
+
+```java
+protected void buildInterpreter() {
+    RuleStore rs = new SimpleRuleStore(context);
+    addInstanceRules(rs);
+    //对interpreter字段实例化
+    this.interpreter = new Interpreter(context, rs, initialElementPath());
+    //创建一个interpretationContext并把context给他代理完成配置
+    InterpretationContext interpretationContext = interpreter.getInterpretationContext();
+    interpretationContext.setContext(context);
+    addImplicitRules(interpreter);
+    addDefaultNestedComponentRegistryRules(interpretationContext.getDefaultNestedComponentRegistry());
+}
+```
+
+然后我们回到:
+
+```java
+public void doConfigure(final List<SaxEvent> eventList) throws JoranException {
+    buildInterpreter();
+    // 防止重复配置
+    synchronized (context.getConfigurationLock()) {
+        interpreter.getEventPlayer().play(eventList);
+    }
+}
+```
+
+这里委托了 EventPlayer来处理SAX流：
+
+```java
+public void play(List<SaxEvent> aSaxEventList) {
+    eventList = aSaxEventList;
+    SaxEvent se;
+    for (currentIndex = 0; currentIndex < eventList.size(); currentIndex++) {
+        se = eventList.get(currentIndex);
+
+        if (se instanceof StartEvent) {
+            interpreter.startElement((StartEvent) se);
+            // invoke fireInPlay after startElement processing
+            interpreter.getInterpretationContext().fireInPlay(se);
+        }
+        if (se instanceof BodyEvent) {
+            // invoke fireInPlay before characters processing
+            interpreter.getInterpretationContext().fireInPlay(se);
+            interpreter.characters((BodyEvent) se);
+        }
+        if (se instanceof EndEvent) {
+            // invoke fireInPlay before endElement processing
+            interpreter.getInterpretationContext().fireInPlay(se);
+            interpreter.endElement((EndEvent) se);
+        }
+
+    }
+}
+```
+
+这里对SAX流的所有元素进行了遍历然后又把元素给到了interpreter来解析处理
 
 
 
