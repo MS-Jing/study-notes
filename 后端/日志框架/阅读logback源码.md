@@ -178,6 +178,10 @@ private static List<SLF4JServiceProvider> findServiceProviders() {
 >
 > ```
 > 
+> ```
+>
+> ```
+> 
 > + 实现类
 > 
 >   + ```java
@@ -194,11 +198,17 @@ private static List<SLF4JServiceProvider> findServiceProviders() {
 >
 > ```
 > 
-> + 在resources目录下创建META-INF/services/com.lj.mpdemo.User文件
-> 
->   + ```txt
-> com.lj.demo.UserImpl
 > ```
+>
+> + 在resources目录下创建META-INF/services/com.lj.mpdemo.User文件
+>
+>   + ```txt
+>    com.lj.demo.UserImpl
+>    ```
+>  ```
+> 
+>  ```
+>
 > ```
 > 
 > ```
@@ -208,14 +218,18 @@ private static List<SLF4JServiceProvider> findServiceProviders() {
 > + 测试
 > 
 >   + ```java
-> public static void main(String[] args) {
-> ServiceLoader<User> users = ServiceLoader.load(User.class);
-> for (User user : users) {
-> System.out.println(user);
-> }
-> }
-> // 结果 aaa
+>  public static void main(String[] args) {
+>  ServiceLoader<User> users = ServiceLoader.load(User.class);
+>  for (User user : users) {
+>  System.out.println(user);
+>  }
+>  }
+>  // 结果 aaa
 > ```
+> ```
+> 
+> ```
+>
 > ```
 > 
 > ```
@@ -1028,6 +1042,16 @@ public void configureByResource(URL url) throws JoranException {
 }
 ```
 
+到此先停一下，我们知道了，logback在加载StaticLoggerBinder类的时候，进行的初始化，内部有一个静态代码块，代用init方法，然后委托ContextInitializer类的自动配置方法对StaticLoggerBinder创建的模式LoggerContext对象进行配置，如何配置的呢？先查找配置文件，我们一般是logback.xml做的配置文件，然后返回文件的URL，判断文件是否没有找到。
+
+如果没有找到通过SPI机制查找是否有相关的配置类，如果还没有就用默认的基本配置BasicConfigurator类来对LoggerContext进行配置。
+
+如果找到文件了呢？就判断文件是什么类型的一般我们使用的都是xml，然后使用JoranConfigurator配置类来对配置文件解析和loggerContext的配置。
+
+# JoranConfigurator配置类如何进行配置？
+
+接下来有点打破砂锅问到底了，其实我们想一想xml文件多半是使用SAX流的形式处理配置文件，然后再以一种栈的结构来对LoggerContext进行配置。
+
 这里进入JoranConfigurator的doConfigure方法看一下如何配置的xml配置文件：
 
 ```java
@@ -1104,8 +1128,10 @@ public void doConfigure(final List<SaxEvent> eventList) throws JoranException {
 
 ```java
 protected void buildInterpreter() {
+    // 创建了一个SimpleRuleStore类
     RuleStore rs = new SimpleRuleStore(context);
     addInstanceRules(rs);
+    // 对interpreter类进行初始化
     this.interpreter = new Interpreter(context, rs, initialElementPath());
     InterpretationContext interpretationContext = interpreter.getInterpretationContext();
     interpretationContext.setContext(context);
@@ -1205,7 +1231,140 @@ public void play(List<SaxEvent> aSaxEventList) {
 }
 ```
 
-这里对SAX流的所有元素进行了遍历然后又把元素给到了interpreter来解析处理
+这里对SAX流的所有元素进行了遍历然后又把元素给到了interpreter来解析处理，我们进入interpreter.startElement((StartEvent) se);看看：
 
+```java
+public void startElement(StartEvent se) {
+    //设置文档定位器
+    setDocumentLocator(se.getLocator());
+    //继续调用
+    startElement(se.namespaceURI, se.localName, se.qName, se.attributes);
+}
+```
 
+```java
+private void startElement(String namespaceURI, String localName, String qName, Attributes atts) {
+	//获取元素的TagName
+    String tagName = getTagName(localName, qName);
+    //将该元素进栈一会会在endElement中出栈
+    elementPath.push(tagName);
 
+    if (skip != null) {
+        // every startElement pushes an action list
+        pushEmptyActionList();
+        return;
+    }
+	// 通过RuleStore来匹配一下，得到处理的Action列表
+    List<Action> applicableActionList = getApplicableActionList(elementPath, atts);
+    if (applicableActionList != null) {
+        actionListStack.add(applicableActionList);
+        callBeginAction(applicableActionList, tagName, atts);
+    } else {
+        // every startElement pushes an action list
+        pushEmptyActionList();
+        String errMsg = "no applicable action for [" + tagName + "], current ElementPath  is [" + elementPath + "]";
+        cai.addError(errMsg);
+    }
+}
+```
+
+ 这个方法先得到元素的TagName，然后通过RuleStore来匹配一下，得到处理的Action列表，然后调用callBeginAction()方法来处理
+
+```java
+void callBeginAction(List<Action> applicableActionList, String tagName, Attributes atts) {
+    //如果Action列表是空的什么都不做
+    if (applicableActionList == null) {
+        return;
+    }
+
+    //迭代遍历Action列表
+    Iterator<Action> i = applicableActionList.iterator();
+    while (i.hasNext()) {
+        Action action = (Action) i.next();
+        try {
+            //调用begin方法
+            action.begin(interpretationContext, tagName, atts);
+        } catch (ActionException e) {
+            skip = elementPath.duplicate();
+            cai.addError("ActionException in Action for tag [" + tagName + "]", e);
+        } catch (RuntimeException e) {
+            skip = elementPath.duplicate();
+            cai.addError("RuntimeException in Action for tag [" + tagName + "]", e);
+        }
+    }
+}
+```
+
+这里会循环调用Action的begin然后让他处理相关的元素对应的逻辑。endElement方法也是大概如此，可自行探究
+
+到此我们知道。JoranConfigurator配置类会先把配置文件流转换成SAX流，然后转换成SaxEvent事件，然后在配置之前，先初始化了interpreter解析器。解析器中有一个RuleStore规则存储对象，也就是说解析器解析的所有元素都是由这个规则存储对应元素的Action对象来处理（比如将我们的Logger和Appender绑定）然后加锁进行初始化，解析元素用一种栈的形式来进行解析。startElement方法进栈调用相关的Action的begin方法，startElement方法出栈调用相关的Action的end方法。最后完成初始化。
+
+# Action又是如何工作的？
+
+前面我们说interpreter解析器最终会调用相关元素对应的Action对象来处理，那么是如何处理的呢？
+
+我们选择LoggerAction做为案例来看一下吧。首先他继承自Action，实现了begin和end方法：
+
+```java
+public void begin(InterpretationContext ec, String name, Attributes attributes) {
+    // Let us forget about previous errors (in this object)
+    inError = false;
+    logger = null;
+	//获取前面的LoggerContext
+    LoggerContext loggerContext = (LoggerContext) this.context;
+    // 日志名  这是会读取日志文件的name属性
+    String loggerName = ec.subst(attributes.getValue(NAME_ATTRIBUTE));
+	//判空
+    if (OptionHelper.isEmpty(loggerName)) {
+        inError = true;
+        String aroundLine = getLineColStr(ec);
+        String errorMsg = "No 'name' attribute in element " + name + ", around " + aroundLine;
+        addError(errorMsg);
+        return;
+    }
+	//通过loggerContext获取该日志对象，如果没有会自动创建
+    logger = loggerContext.getLogger(loggerName);
+
+    // level属性并判断如果不为空为前面创建的logger对象设置
+    String levelStr = ec.subst(attributes.getValue(LEVEL_ATTRIBUTE));
+    if (!OptionHelper.isEmpty(levelStr)) {
+        if (ActionConst.INHERITED.equalsIgnoreCase(levelStr) || ActionConst.NULL.equalsIgnoreCase(levelStr)) {
+            addInfo("Setting level of logger [" + loggerName + "] to null, i.e. INHERITED");
+            logger.setLevel(null);
+        } else {
+            Level level = Level.toLevel(levelStr);
+            addInfo("Setting level of logger [" + loggerName + "] to " + level);
+            logger.setLevel(level);
+        }
+    }
+	//设置是否继承父logger，逻辑一样
+    String additivityStr = ec.subst(attributes.getValue(ActionConst.ADDITIVITY_ATTRIBUTE));
+    if (!OptionHelper.isEmpty(additivityStr)) {
+        boolean additive = OptionHelper.toBoolean(additivityStr, true);
+        addInfo("Setting additivity of logger [" + loggerName + "] to " + additive);
+        logger.setAdditive(additive);
+    }
+    ec.pushObject(logger);
+}
+```
+
+这里对读到的一个logger标签元素进行了对该元素对象的初始化。
+
+```java
+public void end(InterpretationContext ec, String e) {
+    if (inError) {
+        return;
+    }
+    Object o = ec.peekObject();
+    if (o != logger) {
+        addWarn("The object on the top the of the stack is not " + logger + " pushed earlier");
+        addWarn("It is: " + o);
+    } else {
+        ec.popObject();
+    }
+}
+```
+
+这里做了一些检查最后从InterpretationContext中弹出该对象
+
+其他的Action处理逻辑都大体一样，可以看看源码。
