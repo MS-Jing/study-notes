@@ -161,77 +161,32 @@ private static List<SLF4JServiceProvider> findServiceProviders() {
 > + 创建接口
 >
 >   + ```java
->    public interface User {
->    }
->    ```
->  ```
-> 
->  ```
->
-> ```
-> 
-> ```
->
-> ```
-> 
-> ```
->
-> ```
-> 
-> ```
->
-> ```
-> 
+>     public interface User {
+>     }
+>     ```
 > + 实现类
-> 
->   + ```java
->  public class UserImpl implements User {
->  @Override
->  public String toString() {
->  return "aaa";
->  }
->  }
-> ```
-> ```
-> 
-> ```
 >
-> ```
-> 
-> ```
+>   + ```java
+>     public class UserImpl implements User {
+>         @Override
+>         public String toString() {
+>         	return "aaa";
+>         }
+>     }
+>     ```
 >
 > + 在resources目录下创建META-INF/services/com.lj.mpdemo.User文件
->
->   + ```txt
->    com.lj.demo.UserImpl
->    ```
->  ```
-> 
->  ```
->
+> ```txt
+> com.lj.demo.UserImpl
 > ```
-> 
-> ```
->
-> ```
-> 
-> + 测试
-> 
->   + ```java
->  public static void main(String[] args) {
->  ServiceLoader<User> users = ServiceLoader.load(User.class);
->  for (User user : users) {
->  System.out.println(user);
->  }
->  }
->  // 结果 aaa
-> ```
-> ```
-> 
-> ```
->
-> ```
-> 
+> ```java
+> public static void main(String[] args) {
+> ServiceLoader<User> users = ServiceLoader.load(User.class);
+>     for (User user : users) {
+>         System.out.println(user);
+>     }
+> }
+> // 结果 aaa
 > ```
 
 # slf4j源码阅读（1.7.30）
