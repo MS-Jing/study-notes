@@ -370,3 +370,154 @@ JUC提供的ConcurrentHashMap可以用来解决HashMap线程安全的问题
 Collections.synchronizedMap(new HashMap<>())
 ```
 
+
+
+# 线程死锁
+
+```java
+public class Test {
+
+    public static void main(String[] args) {
+        Object a = new Object();
+        Object b = new Object();
+
+        new Thread(() -> {
+            synchronized (a) {
+                System.out.println(Thread.currentThread().getName() + " :获取锁a，尝试获取锁b");
+                try {
+                    TimeUnit.SECONDS.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                synchronized (b) {
+                    System.out.println(Thread.currentThread().getName() + " :以获取锁b");
+                }
+            }
+        }, "A").start();
+
+        new Thread(() -> {
+            synchronized (b) {
+                System.out.println(Thread.currentThread().getName() + " :获取锁b，尝试获取锁a");
+                try {
+                    TimeUnit.SECONDS.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                synchronized (a) {
+                    System.out.println(Thread.currentThread().getName() + " :以获取锁a");
+                }
+            }
+        }, "B").start();
+    }
+}
+```
+
+这里线程A想获取锁b而线程B想获取锁a。形成了死锁。如何判断死锁呢？
+
+我们可以通过如下两个命令:
+
+```bash
+D:\IdeaProjects\JUC>jps -l
+36184 org.jetbrains.jps.cmdline.Launcher
+29468 sun.tools.jps.Jps
+31900
+8364 com.lj.Test    #这是我们的类
+
+D:\IdeaProjects\JUC>jstack 8364  #查看堆栈信息
+......
+Found 1 deadlock.  #说明发现了死锁
+```
+
+# Callable接口
+
+Runnable接口创建线程，当线程终止时（run执行完），我们无法使线程返回结果，为了支持此功能，java提供了Callable接口
+
+```java
+public class Demo1 implements Callable<String> {
+    @Override
+    public String call() throws Exception {
+        return "string";
+    }
+
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        FutureTask<String> task = new FutureTask<>(new Demo1());
+        new Thread(task,"A").start();
+        System.out.println(task.get());
+    }
+}
+```
+
+Callable不能直接创建线程，需要借助FutureTask类（底层还是Runnable）来完成，task.get()会阻塞等线程计算完结果后才会返回
+
+# 辅助类
+
+## CountDownLatch
+
+CountDownLatch类可以设置一个计数器，然后通过countDown方法来进行减1的操作。使用await方法等待计数器不大于0，然后继续执行await方法之后的语句。
+
++ CountDownLatch主要有两个方法，当一个或多个线程调用await方法时，这些线程会阻塞
++ 其他线程调用countDown方法会将计数器减1
++ 当计数器变为0时，await方法阻塞的线程会被唤醒继续执行
+
+```java
+public static void main(String[] args) throws InterruptedException {
+
+    CountDownLatch countDownLatch = new CountDownLatch(6);
+
+    for (int i = 1; i <= 6; i++) {
+        new Thread(() -> {
+            System.out.println(Thread.currentThread().getName() + "离开");
+            countDownLatch.countDown();
+        }, String.valueOf(i)).start();
+    }
+    countDownLatch.await();
+    System.out.println("主线程关闭");
+}
+```
+
+## CyclicBarrier
+
+```java
+public static void main(String[] args) throws InterruptedException {
+    CyclicBarrier cyclicBarrier = new CyclicBarrier(5, () -> {
+        System.out.println("开始执行");
+    });
+    for (int i = 0; i < 5; i++) {
+        new Thread(()->{
+            try {
+                cyclicBarrier.await();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+}
+```
+
+当有5个线程在等待才会执行Runnable接口，否则其他线程就一直等待，直到等待数量达到了设置的值
+
+## Semaphore
+
+```java
+public static void main(String[] args) throws InterruptedException {
+    Semaphore semaphore = new Semaphore(3);
+
+    for (int i = 0; i < 6; i++) {
+        new Thread(() -> {
+            try {
+                semaphore.acquire();
+                System.out.println(Thread.currentThread().getName() + " 获取一个信号");
+                TimeUnit.SECONDS.sleep(10);
+                semaphore.release();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }, String.valueOf(i)).start();
+    }
+}
+```
+
+指定一个信号量。每个线程来获取一个信号，当到达设定值时，其他线程只能等待线程释放信号量。类似于一个停车场，车位一定，没有车位只能等待其他车主让出车位
+
+
+
