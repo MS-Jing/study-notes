@@ -519,5 +519,226 @@ public static void main(String[] args) throws InterruptedException {
 
 指定一个信号量。每个线程来获取一个信号，当到达设定值时，其他线程只能等待线程释放信号量。类似于一个停车场，车位一定，没有车位只能等待其他车主让出车位
 
+# 阻塞队列
+
+通过一个共享的队列，可以使数据由队列的一端输入，从另一端输出
+
+当队列是空的，从队列中获取元素的操作会被阻塞
+
+当队列是满的，从队列中添加元素的操作会报阻塞
+
+## 常见的BlockingQueue
+
++ ArrayBlockingQueue
+
+基于数组的阻塞队列实现,在ArrayBlockingQueue内部,维护了一个定长数组,以便缓存队列中的数据对象,这是一个常用的阻塞队列,除了一个定长数组外, ArrayBlockingQueue内部还保存着两个整形变量,分别标识着队列的头部和尾部在数组中的位置。
+
++ LinkedBlockingQueue
+
+基于链表的阻塞队列
+
++ DelayQueue
+
+DelayQueue中的元素只有当其指定的延迟时间到了，才能够从队列中获取到该元素。这是一个没有大小的限制的队列，所以生成者永远不会被阻塞
+
++ SynchronousQueue
+
+不存储元素的阻塞队列，单个元素的队列
+
+## 常用方法
+
+| 方法类型 | 抛出异常  | 特殊值   | 阻塞   | 超时               |
+| -------- | --------- | -------- | ------ | ------------------ |
+| 插入     | add(e)    | offer(e) | put()  | offer(e,time,unit) |
+| 移除     | remove()  | poll()   | take() | poll(time,unit)    |
+| 检查     | element() | peek()   | /      | /                  |
+
+抛出异常：队列满了或者空了，再进行添加或者移除会抛出异常
+
+特殊值：插入成功还是失败返回false。移除返回元素没有返回空
+
+阻塞：插入队列满了或者移除队列空了就阻塞
+
+超时：和上面的一样会阻塞一个超时时间，时间到了会自动退出
+
+# ThreadPool线程池
+
+一种线程使用模式。线程过多会带来调度开销，进而影响缓存局部性和整体性能。而线程池维护着多个线程,等待着监督管理者分配可并发执行的任务。这避免了在处理短时间任务时创建与销毁线程的代价。线程池不仅能够保证内核的充分利用,还能防止过分调度。
+
+**线程池的优势**:线程池做的工作只要是控制运行的线程数量,处理过程中将任务放入队列,然后在线程创建后启动这些任务,如果线程数量超过了最大数量，超出数量的线程排队等候,等其他线程执行完毕,再从队列中取出任务来执行。
+
+Executor架构图：
+
+![](./Executor.png)
+
+
+
+Executors其实就是一个工具类用来创建这些线程池
+
+## 常用的线程池
+
++ Executors.newFixedThreadPool()，一个线程池有多个线程
+
+  + ```java
+    public static void main(String[] args) {
+        ExecutorService pool = Executors.newFixedThreadPool(3);
+    
+        try {
+            for (int i = 0; i < 10; i++) {
+                int a = i;
+                pool.execute(() -> {
+                    System.out.println(Thread.currentThread().getName() + " : " + a);
+                    try {
+                        TimeUnit.SECONDS.sleep(1);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                });
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }finally {
+            pool.shutdown();
+        }
+    
+    }
+    ```
+
++ Executors.newSingleThreadExecutor()，一个线程池就一个线程，任务只能一个一个执行
+
+  + ```java
+    public static void main(String[] args) {
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+    
+        try {
+            for (int i = 0; i < 10; i++) {
+                int a = i;
+                pool.execute(() -> {
+                    System.out.println(Thread.currentThread().getName() + " : " + a);
+                    try {
+                        TimeUnit.SECONDS.sleep(1);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                });
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }finally {
+            pool.shutdown();
+        }
+    
+    }
+    ```
+
++ Executors.newCachedThreadPool(),可根据需要创建线程，可以扩容
+
+  + ```java
+    public static void main(String[] args) {
+        ExecutorService pool = Executors.newCachedThreadPool();
+    
+        try {
+            for (int i = 0; i < 10; i++) {
+                int a = i;
+                pool.execute(() -> {
+                    System.out.println(Thread.currentThread().getName() + " : " + a);
+                    try {
+                        TimeUnit.SECONDS.sleep(1);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                });
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }finally {
+            pool.shutdown();
+        }
+    
+    }
+    ```
+
+## 线程池的七个参数
+
+从前面的Executors工具类我们可以看到，其实底层都是创建的ThreadPoolExecutor对象。那么我们来看看他的参数
+
+```java
+public ThreadPoolExecutor(int corePoolSize,
+                          int maximumPoolSize,
+                          long keepAliveTime,
+                          TimeUnit unit,
+                          BlockingQueue<Runnable> workQueue,
+                          ThreadFactory threadFactory,
+                          RejectedExecutionHandler handler) {
+    if (corePoolSize < 0 ||
+        maximumPoolSize <= 0 ||
+        maximumPoolSize < corePoolSize ||
+        keepAliveTime < 0)
+        throw new IllegalArgumentException();
+    if (workQueue == null || threadFactory == null || handler == null)
+        throw new NullPointerException();
+    this.acc = System.getSecurityManager() == null ?
+        null :
+    AccessController.getContext();
+    this.corePoolSize = corePoolSize;
+    this.maximumPoolSize = maximumPoolSize;
+    this.workQueue = workQueue;
+    this.keepAliveTime = unit.toNanos(keepAliveTime);
+    this.threadFactory = threadFactory;
+    this.handler = handler;
+}
+
+```
+
++ corePoolSize：核心线程数
++ maximumPoolSize：最大线程数
++ keepAliveTime：多余线程（就是大于核心线程的线程数）的空闲等待时间
++ unit：等待时间的时间单位
++ workQueue：当任务数大于核心线程数时的任务队列
++ threadFactory：用于创建线程的工厂
++ handler：当线程和队列都满了时要执行的处理器（拒绝策略）
+  + AblortPolicy(默认): 直接抛出RejectedExecutionException异常阻止系统正常运行
+  + CallerRunPolicy: "调用者运行"一种调节机制。该策略既不会抛弃任务，也不会抛出异常，而是将某些任务回退到调用者，从而降低新任务的流量
+  + DiscardOldstPolicy: 抛弃队列中等待最久的任务，然后把当前任务加入队列中尝试再次提交当前任务
+  + DiscardPolicy: 该策略默默的丢弃无法处理的任务，不予任何处理也不抛出异常。
+
+
+
+## 线程池的工作流程
+
++ 执行了execute（）方法后
+  + 判断当前线程数是否达到了核心线程数，
+    + 没有达到了核心线程数就创建新的线程
+    + 达到了核心线程数，判断当前队列是否已经满了
+      + 没有满的话就将任务放队列
+      + 满了的话判断当前线程是否大于最大线程数
+        + 没有大于最大线程数就创建新的线程
+        + 大于了最大线程数触发拒绝策略（handler）
+
+# 分支合并框架
+
+Fork/join它可以将一个大的任务拆分成多个子任务进行并行处理，最后将子任务结果合并成最后的计算结果，并进行输出。
+
++ Fork: 把一个复杂任务进行拆分
++ Join：把拆分任务的结果进行合并
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
