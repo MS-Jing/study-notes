@@ -181,6 +181,23 @@ func main() {
 
 注意：如果变量名，函数名，常量名首字母大写，则其他包可以访问，小写只有本包可以访问
 
+# 终端输入
+
+```go
+func main() {
+	var name string
+	fmt.Printf("姓名：")
+	fmt.Scanln(&name)
+	fmt.Println("你的姓名: " + name)
+
+	//像C语言那样原样输入
+	var age int
+	fmt.Println("姓名,年龄")
+	fmt.Scanf("%s %d", &name, &age)
+	fmt.Printf("%s,%d", name, age)
+}
+```
+
 
 
 
