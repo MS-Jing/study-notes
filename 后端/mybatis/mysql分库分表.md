@@ -194,6 +194,387 @@ class ShardingJdbcApplicationTests {
 
 
 
+## 水平分库
+
+### 环境搭建
+
+```mysql
+# 第一个库
+create database edu_db_1;
+# 使用第一个库
+use edu_db_1;
+# 创建课程表1
+create table course_1
+(
+    cid bigint not null comment '课程id',
+    cname varchar(50) not null comment '课程名称',
+    user_id bigint not null comment '课程创建的用户id',
+    cstatus varchar(10) not null comment '课程状态',
+    constraint course_1_pk
+        primary key (cid)
+)
+    comment '课程表1';
+# 创建课程表2
+create table course_2
+(
+    cid bigint not null comment '课程id',
+    cname varchar(50) not null comment '课程名称',
+    user_id bigint not null comment '课程创建的用户id',
+    cstatus varchar(10) not null comment '课程状态',
+    constraint course_1_pk
+        primary key (cid)
+)
+    comment '课程表2';
+
+# 第二个库
+create database edu_db_2;
+# 使用第二个库
+use edu_db_2;
+# 创建课程表1
+create table course_1
+(
+    cid bigint not null comment '课程id',
+    cname varchar(50) not null comment '课程名称',
+    user_id bigint not null comment '课程创建的用户id',
+    cstatus varchar(10) not null comment '课程状态',
+    constraint course_1_pk
+        primary key (cid)
+)
+    comment '课程表1';
+# 创建课程表2
+create table course_2
+(
+    cid bigint not null comment '课程id',
+    cname varchar(50) not null comment '课程名称',
+    user_id bigint not null comment '课程创建的用户id',
+    cstatus varchar(10) not null comment '课程状态',
+    constraint course_1_pk
+        primary key (cid)
+)
+    comment '课程表2';
+```
+
+### 配置
+
+```properties
+
+#数据源名称
+spring.shardingsphere.datasource.names=m1,m2
+
+#配置第一个数据源
+spring.shardingsphere.datasource.m1.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.m1.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.shardingsphere.datasource.m1.url=jdbc:mysql://localhost:3306/edu_db_1?serverTimezone=GMT%2B8
+spring.shardingsphere.datasource.m1.username=root
+spring.shardingsphere.datasource.m1.password=root
+#配置第二个数据源
+spring.shardingsphere.datasource.m2.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.m2.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.shardingsphere.datasource.m2.url=jdbc:mysql://localhost:3306/edu_db_2?serverTimezone=GMT%2B8
+spring.shardingsphere.datasource.m2.username=root
+spring.shardingsphere.datasource.m2.password=root
+
+#指定数据库分布和表分布情况
+##由m1和m2两个数据源分别有 course_1和course_2两张表
+spring.shardingsphere.sharding.tables.course.actual-data-nodes=m$->{1..2}.course_$->{1..2}
+#表的主键和主键生成策略
+spring.shardingsphere.sharding.tables.course.key-generator.column=cid
+spring.shardingsphere.sharding.tables.course.key-generator.type=SNOWFLAKE
+
+#表分片策略  约定cid的值是是奇数添加到course_2中否则到course_1中
+spring.shardingsphere.sharding.tables.course.table-strategy.inline.sharding-column=cid
+spring.shardingsphere.sharding.tables.course.table-strategy.inline.algorithm-expression=course_$->{cid % 2 + 1}
+
+#数据库分片策略 约定user_id是偶数添加到m1数据源中，是奇数添加到m2数据源
+spring.shardingsphere.sharding.tables.course.database-strategy.inline.sharding-column=user_id
+spring.shardingsphere.sharding.tables.course.database-strategy.inline.algorithm-expression=m$->{user_id % 2 + 1}
+
+#打开sql输出日志
+spring.shardingsphere.props.sql.show=true
+# spring的DataSource和Druid的DataSource重名了。设置允许bean覆盖
+spring.main.allow-bean-definition-overriding=true
+```
+
+测试：
+
+```java
+@SpringBootTest
+class ShardingJdbcApplicationTests {
+
+    @Autowired
+    private CourseMapper courseMapper;
+
+    @Test
+    void add() {
+        Course course = new Course();
+        course.setCname("java");
+        course.setUserId(100L); //因为user_id是偶数，所以这条数据会被加到db1表
+        course.setCstatus("Normal");
+        courseMapper.insert(course);
+    }
+
+    @Test
+    void find() {
+        // 如果只加cname字段会去两个库的四个表中都去查一遍   4条sql
+        // 如果只加cid 字段会去两个库中的两个表中去查    2条sql
+        // 如果只加user_id 字段会去第一个库的两个表查  2条sql
+        // 如果user_id和cid字段都加回去第一个库的对应表查    1条sql
+        System.out.println(courseMapper.selectList(new QueryWrapper<Course>()
+                .eq("cname", "java")
+                .eq("user_id", 100)
+                .eq("cid",1455737687704104961L)
+        ));
+    }
+
+}
+```
+
+
+
+## 垂直分库
+
+### 环境搭建
+
+```mysql
+#创建用户数据库
+create database user_db;
+#使用
+use user_db;
+
+create table t_user
+(
+    user_id bigint not null comment '用户id',
+    username varchar(20) not null comment '用户名',
+    ustatus varchar(20) not null comment '用户状态',
+    constraint t_user_pk
+        primary key (user_id)
+);
+```
+
+```java
+@Data
+@TableName("t_user")
+public class User {
+    private Long userId;
+    private String username;
+    private String ustatus;
+}
+```
+
+```java
+@Repository
+public interface UserMapper extends BaseMapper<User> {
+}
+```
+
+### 配置
+
+```properties
+
+#数据源名称
+spring.shardingsphere.datasource.names=m1,m2,m0
+
+#配置第一个数据源
+spring.shardingsphere.datasource.m1.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.m1.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.shardingsphere.datasource.m1.url=jdbc:mysql://localhost:3306/edu_db_1?serverTimezone=GMT%2B8
+spring.shardingsphere.datasource.m1.username=root
+spring.shardingsphere.datasource.m1.password=root
+#配置第二个数据源
+spring.shardingsphere.datasource.m2.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.m2.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.shardingsphere.datasource.m2.url=jdbc:mysql://localhost:3306/edu_db_2?serverTimezone=GMT%2B8
+spring.shardingsphere.datasource.m2.username=root
+spring.shardingsphere.datasource.m2.password=root
+
+#指定数据库分布和表分布情况
+##由m1和m2两个数据源分别有 course_1和course_2两张表
+spring.shardingsphere.sharding.tables.course.actual-data-nodes=m$->{1..2}.course_$->{1..2}
+#表的主键和主键生成策略
+spring.shardingsphere.sharding.tables.course.key-generator.column=cid
+spring.shardingsphere.sharding.tables.course.key-generator.type=SNOWFLAKE
+
+#表分片策略  约定cid的值是是奇数添加到course_2中否则到course_1中
+spring.shardingsphere.sharding.tables.course.table-strategy.inline.sharding-column=cid
+spring.shardingsphere.sharding.tables.course.table-strategy.inline.algorithm-expression=course_$->{cid % 2 + 1}
+
+#数据库分片策略 约定user_id是偶数添加到m1数据源中，是奇数添加到m2数据源
+spring.shardingsphere.sharding.tables.course.database-strategy.inline.sharding-column=user_id
+spring.shardingsphere.sharding.tables.course.database-strategy.inline.algorithm-expression=m$->{user_id % 2 + 1}
+
+#配置第三个数据源
+spring.shardingsphere.datasource.m0.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.m0.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.shardingsphere.datasource.m0.url=jdbc:mysql://localhost:3306/user_db?serverTimezone=GMT%2B8
+spring.shardingsphere.datasource.m0.username=root
+spring.shardingsphere.datasource.m0.password=root
+
+#配置user_db数据库里面的t_user 专库专表
+spring.shardingsphere.sharding.tables.t_user.actual-data-nodes=m$->{0}.t_user
+spring.shardingsphere.sharding.tables.t_user.key-generator.column=user_id
+spring.shardingsphere.sharding.tables.t_user.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.t_user.table-strategy.inline.sharding-column=user_id
+spring.shardingsphere.sharding.tables.t_user.table-strategy.inline.algorithm-expression=t_user
+
+#打开sql输出日志
+spring.shardingsphere.props.sql.show=true
+# spring的DataSource和Druid的DataSource重名了。设置允许bean覆盖
+spring.main.allow-bean-definition-overriding=true
+```
+
+测试：
+
+```java
+@Autowired
+private UserMapper userMapper;
+
+@Test
+void add() {
+    User user = new User();
+    user.setUsername("张三");
+    user.setUstatus("正常");
+    userMapper.insert(user);
+}
+```
+
+
+
+## 公共表
+
+存储固定数据的表，表数据很少发送变化，查询时经常进行关联的表。例如字典表
+
+### 环境搭建
+
+```mysql
+use user_db;
+create table t_dict
+(
+    dict_id bigint not null comment '字典id',
+    value varchar(20) not null comment '字典的值',
+    status varchar(20) not null comment '字典状态',
+    constraint t_dict_pk
+        primary key (dict_id)
+);
+
+use edu_db_1;
+create table t_dict
+(
+    dict_id bigint not null comment '字典id',
+    value varchar(20) not null comment '字典的值',
+    status varchar(20) not null comment '字典状态',
+    constraint t_dict_pk
+        primary key (dict_id)
+);
+
+use edu_db_2;
+create table t_dict
+(
+    dict_id bigint not null comment '字典id',
+    value varchar(20) not null comment '字典的值',
+    status varchar(20) not null comment '字典状态',
+    constraint t_dict_pk
+        primary key (dict_id)
+);
+```
+
+```properties
+
+#数据源名称
+spring.shardingsphere.datasource.names=m1,m2,m0
+
+#配置第一个数据源
+spring.shardingsphere.datasource.m1.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.m1.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.shardingsphere.datasource.m1.url=jdbc:mysql://localhost:3306/edu_db_1?serverTimezone=GMT%2B8
+spring.shardingsphere.datasource.m1.username=root
+spring.shardingsphere.datasource.m1.password=root
+#配置第二个数据源
+spring.shardingsphere.datasource.m2.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.m2.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.shardingsphere.datasource.m2.url=jdbc:mysql://localhost:3306/edu_db_2?serverTimezone=GMT%2B8
+spring.shardingsphere.datasource.m2.username=root
+spring.shardingsphere.datasource.m2.password=root
+
+#指定数据库分布和表分布情况
+##由m1和m2两个数据源分别有 course_1和course_2两张表
+spring.shardingsphere.sharding.tables.course.actual-data-nodes=m$->{1..2}.course_$->{1..2}
+#表的主键和主键生成策略
+spring.shardingsphere.sharding.tables.course.key-generator.column=cid
+spring.shardingsphere.sharding.tables.course.key-generator.type=SNOWFLAKE
+
+#表分片策略  约定cid的值是是奇数添加到course_2中否则到course_1中
+spring.shardingsphere.sharding.tables.course.table-strategy.inline.sharding-column=cid
+spring.shardingsphere.sharding.tables.course.table-strategy.inline.algorithm-expression=course_$->{cid % 2 + 1}
+
+#数据库分片策略 约定user_id是偶数添加到m1数据源中，是奇数添加到m2数据源
+spring.shardingsphere.sharding.tables.course.database-strategy.inline.sharding-column=user_id
+spring.shardingsphere.sharding.tables.course.database-strategy.inline.algorithm-expression=m$->{user_id % 2 + 1}
+
+#配置第三个数据源
+spring.shardingsphere.datasource.m0.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.m0.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.shardingsphere.datasource.m0.url=jdbc:mysql://localhost:3306/user_db?serverTimezone=GMT%2B8
+spring.shardingsphere.datasource.m0.username=root
+spring.shardingsphere.datasource.m0.password=root
+
+#配置user_db数据库里面的t_user 专库专表
+spring.shardingsphere.sharding.tables.t_user.actual-data-nodes=m$->{0}.t_user
+spring.shardingsphere.sharding.tables.t_user.key-generator.column=user_id
+spring.shardingsphere.sharding.tables.t_user.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.t_user.table-strategy.inline.sharding-column=user_id
+spring.shardingsphere.sharding.tables.t_user.table-strategy.inline.algorithm-expression=t_user
+
+#公共表
+spring.shardingsphere.sharding.broadcast-tables=t_dict
+spring.shardingsphere.sharding.tables.t_dict.key-generator.column=dict_id
+spring.shardingsphere.sharding.tables.t_dict.key-generator.type=SNOWFLAKE
+
+
+#打开sql输出日志
+spring.shardingsphere.props.sql.show=true
+# spring的DataSource和Druid的DataSource重名了。设置允许bean覆盖
+spring.main.allow-bean-definition-overriding=true
+```
+
+```java
+@Data
+@TableName("t_dict")
+public class Dict {
+    private Long dictId;
+    private String value;
+    private String status;
+}
+```
+
+```java
+@Repository
+public interface DictMapper extends BaseMapper<Dict> {
+}
+```
+
+测试：
+
+```java
+@Autowired
+private DictMapper dictMapper;
+
+@Test
+void add() {
+    Dict dict = new Dict();
+    dict.setValue("男");
+    dict.setStatus("正常");
+    dictMapper.insert(dict);
+}
+```
+
+
+
+## 读写分离
+
+
+
+
+
 
 
 
