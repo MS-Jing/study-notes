@@ -22,6 +22,18 @@ import java.util.List;
 /*
  * 将该生成器放到你要生成的项目的测试目录下
  * 根据情况修改相应的属性
+ *MyBatis-Plus 从 3.0.3 之后移除了代码生成器与模板引擎的默认依赖，需要手动添加相关依赖
+ *<!--代码生成器-->
+ *      <dependency>
+ *          <groupId>com.baomidou</groupId>
+ *          <artifactId>mybatis-plus-generator</artifactId>
+ *          <version>3.0.5</version>
+ *      </dependency>
+ *      <dependency>
+ *          <groupId>org.apache.velocity</groupId>
+ *          <artifactId>velocity-engine-core</artifactId>
+ *          <version>2.0</version>
+ *      </dependency>
  * */
 public class CodeGenerator {
 
@@ -44,7 +56,7 @@ public class CodeGenerator {
         // 2、全局配置
         GlobalConfig gc = new GlobalConfig();
         String projectPath = System.getProperty("user.dir");
-        System.out.println("生成位置："+projectPath);
+        System.out.println("生成位置：" + projectPath);
         gc.setOutputDir(projectPath + "/src/main/java");
         gc.setAuthor(author);
         gc.setOpen(false); //生成后是否打开资源管理器
@@ -86,7 +98,7 @@ public class CodeGenerator {
         strategy.setNaming(NamingStrategy.underline_to_camel);//数据库表映射到实体的命名策略
 
         //生成实体时去掉表前缀
-        if (rm_prefix){
+        if (rm_prefix) {
             List<String> tablePrefixs = new ArrayList<>();
             for (String s : strategy.getInclude()) {
                 tablePrefixs.add(s.split("_")[0] + "_");
@@ -110,7 +122,7 @@ public class CodeGenerator {
     }
 
     //自定义模板配置
-    private void templateConfig(AutoGenerator generator){
+    private void templateConfig(AutoGenerator generator) {
         // 自定义配置
         InjectionConfig cfg = new InjectionConfig() {
             @Override
@@ -120,9 +132,9 @@ public class CodeGenerator {
         };
 
         String templatePath = null;
-        if (templateEngine.equals(FreemarkerTemplateEngine.class)){
+        if (templateEngine.equals(FreemarkerTemplateEngine.class)) {
             templatePath = "/templates/mapper.xml.ftl";
-        }else if (templateEngine.equals(VelocityTemplateEngine.class)){
+        } else if (templateEngine.equals(VelocityTemplateEngine.class)) {
             templatePath = "/templates/mapper.xml.vm";
         }
 
