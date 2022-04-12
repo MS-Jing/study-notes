@@ -255,3 +255,46 @@ switch a {
 + switch 穿透 fallthrough。如果在case语句块后增加fallthrough，会继续执行下一个case,也叫switch穿透。
 
 ## 循环控制
+
+```go
+// 方式一
+for i := 0; i < 10; i++ {
+    fmt.Println("hello word")
+}
+//方式二
+i := 0
+for i < 10 {
+   fmt.Println("hello word")
+    i++
+}
+// 方式三，死循环
+for {
+    fmt.Println("hello word")
+}
+//遍历列表
+for index, value := range "hello word" {
+    fmt.Printf("index=%d,value=%c \n", index, value)
+}
+
+```
+
+
+
+
+
+# 函数
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
